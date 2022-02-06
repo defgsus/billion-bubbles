@@ -1,0 +1,113 @@
+:root {
+    --bg-color: #222;
+    --bg-color-dark1: #111;
+    --bg-color-dark2: #000;
+    --bg-color-light0: #494949;
+    --bg-color-light1: #555;
+    --bg-color-light2: #666;
+    --color: #eee;
+    --link-color: #9aaad9;
+    --link-active-color: #7462f4;
+}
+body {
+    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+    background: var(--bg-color);
+    color: var(--color);
+}
+
+a {
+    color: var(--link-color);
+}
+a:active {
+    color: var(--link-active-color);
+}
+
+input {
+    background: var(--bg-color);
+    border-top-color: var(--bg-color-dark2);
+    border-left-color: var(--bg-color-dark2);
+    border-bottom-color: var(--bg-color-light2);
+    border-right-color: var(--bg-color-light2);
+    color: var(--color);
+}
+
+.grid-x {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.grid-x.nowrap {
+    flex-wrap: nowrap;
+}
+
+.grid-x.margin-right > * {
+    margin-right: .5rem;
+}
+.grid-x.margin-bottom > * {
+    margin-bottom: .5rem;
+}
+.grid-x > .grow {
+    flex-grow: 1000;
+}
+.grid-x.inline {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+
+#network {
+    background: var(--bg-color-dark1);
+}
+
+#network .node {
+
+}
+
+#network .node circle {
+    stroke: rgba(0, 0, 0, .3);
+    stroke-width: 3px;
+}
+#network .node circle:hover {
+    stroke: rgba(150, 150, 150, .4);
+}
+#network text  {
+    pointer-events: none;
+}
+
+.hidden {
+    visibility: hidden;
+}
+
+.controls {
+    position: relative;
+    padding: .5rem;
+}
+
+.controls .headline {
+    margin-bottom: .1rem;
+    font-size: 133%;
+}
+
+.palette {
+    width: 14rem;
+    max-height: 20rem;
+    overflow: scroll;
+    margin: .5rem;
+}
+
+.palette .entry {
+    cursor: pointer;
+    padding-right: .5rem;
+    font-weight: bold;
+    text-align: right;
+    text-shadow:
+            1px 0 0 black,
+            -1px 0 0 black,
+            0 -1px 0 black,
+            0 -1px 0 black;
+}
+
+.palette .entry .prefix {
+    min-width: 4rem;
+}
