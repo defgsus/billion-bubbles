@@ -14,7 +14,7 @@ class NasdaqApi:
     """
 
     REQUEST_TIMEOUT = 30.
-    REQUEST_RETRIES = 3
+    REQUEST_RETRIES = 4
 
     def __init__(
             self,
@@ -29,7 +29,13 @@ class NasdaqApi:
             "accept": "Accept: application/json, text/plain, */*",
         }
 
-    def request(self, url, as_json: bool = True, **kwargs) -> Union[str, list, dict]:
+    def request(
+            self,
+            url: str,
+            as_json: bool = True,
+            clear_cookies: bool = False,
+            **kwargs,
+    ) -> Union[str, list, dict]:
         kwargs.setdefault("timeout", self.REQUEST_TIMEOUT)
         for i in range(self.REQUEST_RETRIES):
             try:
@@ -39,6 +45,8 @@ class NasdaqApi:
                     else:
                         print(f"\nretry {i} request {url}", file=sys.stderr)
                 response = self.session.get(url, **kwargs)
+                if clear_cookies:
+                    self.session.cookies.clear()
                 if as_json:
                     return response.json()
                 return response.text
@@ -47,6 +55,8 @@ class NasdaqApi:
                     print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
                 if i + 1 == self.REQUEST_RETRIES:
                     raise
+                kwargs["timeout"] += 5
+                time.sleep(.5)
 
     def search(self, query: str):
         url = f"https://api.nasdaq.com/api/autocomplete/slookup/10"
@@ -80,7 +90,7 @@ class NasdaqApi:
             date_to = date_to.strftime("%Y-%m-%d")
         url = f"https://api.nasdaq.com/api/quote/{symbol}/chart" \
               f"?assetclass={asset_class}&fromdate={date_from}&todate={date_to}"
-        return self.request(url, json=True)
+        return self.request(url, json=True, clear_cookies=True)
 
     def institutional_holdings(
             self,
@@ -92,7 +102,10 @@ class NasdaqApi:
     ):
         if is_company is None:
             is_company = isinstance(id, str)
-        sort_column = "marketValue" if is_company else "value"
+
+        # sort_column = "marketValue" if is_company else "value"
+        sort_column = "ownerName"  # this seems to be faster than value/marketValue
+
         url = f"https://api.nasdaq.com/api/company/{id}/institutional-holdings" \
               f"?limit={limit}&offset={offset}&type={type}&sortColumn={sort_column}&sortOrder=DESC"
 

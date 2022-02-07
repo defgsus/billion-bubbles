@@ -1,7 +1,8 @@
 import json
+import time
 from typing import Optional, Union
 
-from .nasdaq_db import NasdaqDatabase
+from .nasdaq_db import NasdaqDatabase, get_path
 
 
 class NasdaqWalker:
@@ -12,15 +13,28 @@ class NasdaqWalker:
     def __init__(
             self,
             db: NasdaqDatabase,
+            stock_charts: bool = True,
+            follow_holders: bool = True,
+            follow_insiders: bool = True,
             max_depth: int = 0,
-            share_markt_value_gte: int = 0,
+            share_market_value_gte: int = 0,
+
     ):
         self.db = db
-        self._share_markt_value_gte = share_markt_value_gte
+        self._do_stock_charts = stock_charts
+        self._do_follow_holders = follow_holders
+        self._do_follow_insiders = follow_insiders
+        self._share_market_value_gte = share_market_value_gte
         self._max_depth = max_depth
         self._todo_company = dict()
         self._todo_institution = dict()
+        self._todo_insiders = dict()
         self._seen = set()
+        self._num_companies = 0
+        self._num_institutions = 0
+        self._num_insiders = 0
+        self._start_time = time.time()
+        self._last_message_time = self._start_time
 
     def add_company(self, symbol: str, depth: int = 0):
         symbol = symbol.upper()
@@ -40,10 +54,61 @@ class NasdaqWalker:
                 self._todo_institution[id] = min(self._todo_institution[id], depth)
         self._seen.add(id)
 
+    def add_insider(self, id: Union[int, str], depth: int = 0):
+        id = int(id)
+        if id not in self._seen:
+            if id not in self._todo_insiders:
+                self._todo_insiders[id] = depth
+            else:
+                self._todo_insiders[id] = min(self._todo_insiders[id], depth)
+        self._seen.add(id)
+
     def run(self):
-        while self._todo_company or self._todo_institution:
+        while self._todo_company or self._todo_institution or self._todo_insiders:
+            self._dump_status()
             self._follow_company()
+            self._dump_status()
             self._follow_institution()
+            self._dump_status()
+            self._follow_insider()
+
+    def status_string(self) -> str:
+        return (
+            f"todo: (company, institution, insider)"
+            f" {len(self._todo_company)}, {len(self._todo_institution)}, {len(self._todo_insiders)}"
+            f", done: {self._num_companies}, {self._num_institutions}, {self._num_insiders}"
+        )
+
+    # --- these are called by the run method, ready to override ---
+
+    def on_company_profile(self, symbol: str, data: dict):
+        pass
+
+    def on_company_holders(self, symbol: str, data: Optional[dict]):
+        pass
+
+    def on_company_insiders(self, symbol: str, data: Optional[dict]):
+        pass
+
+    def on_stock_chart(self, symbol: str, data: dict):
+        pass
+
+    def on_institution_positions(self, id: int, data: Optional[dict]):
+        pass
+
+    def on_insider_positions(self, id: int, data: Optional[dict]):
+        pass
+
+    # --- private ---
+
+    def _dump_status(self):
+        cur_time = time.time()
+        if cur_time - self._last_message_time >= 1.:
+            self._last_message_time = cur_time
+            print(
+                f"@ {cur_time - self._start_time:.0f} sec"
+                f", {self.status_string()}"
+            )
 
     def _follow_company(self):
         if not self._todo_company:
@@ -52,35 +117,20 @@ class NasdaqWalker:
         symbol = sorted(self._todo_company)[0]
         depth = self._todo_company[symbol]
         del self._todo_company[symbol]
+        self._num_companies += 1
 
         profile = self.db.company_profile(symbol)["data"]
         self.on_company_profile(symbol, profile)
 
-        chart = self.db.stock_chart(symbol)["data"]
-        self.on_stock_chart(symbol, chart)
+        if self._do_stock_charts:
+            chart = self.db.stock_chart(symbol)["data"]
+            self.on_stock_chart(symbol, chart)
 
-        holders = self.db.company_holders(symbol)["data"]
-        self.on_company_holders(symbol, holders)
+        if self._do_follow_holders:
+            self._follow_company_holders(symbol, depth)
 
-        if depth >= self._max_depth:
-            return
-
-        try:
-            value_title = holders["holdingsTransactions"]["table"]["headers"]["marketValue"]
-            assert value_title == "VALUE (IN 1,000S)"
-
-            for row in holders["holdingsTransactions"]["table"]["rows"]:
-                if not row["url"]:
-                    continue
-
-                value = to_int(row["marketValue"][1:]) * 1_000
-
-                if value >= self._share_markt_value_gte:
-                    id = int(row["url"].split("-")[-1])
-                    self.add_institution(id, depth + 1)
-        except:
-            print(json.dumps(holders, indent=2)[:10000])
-            raise
+        if self._do_follow_insiders:
+            self._follow_company_insiders(symbol, depth)
 
     def _follow_institution(self):
         if not self._todo_institution:
@@ -89,50 +139,110 @@ class NasdaqWalker:
         id = sorted(self._todo_institution)[0]
         depth = self._todo_institution[id]
         del self._todo_institution[id]
+        self._num_institutions += 1
 
+        if self._do_follow_holders:
+            self._follow_institution_positions(id, depth)
+
+    def _follow_insider(self):
+        if not self._todo_insiders:
+            return
+
+        id = sorted(self._todo_insiders)[0]
+        depth = self._todo_insiders[id]
+        del self._todo_insiders[id]
+        self._num_insiders += 1
+
+        if self._do_follow_insiders:
+            self._follow_insider_positions(id, depth)
+
+    def _follow_company_holders(self, symbol: str, depth: int):
+        holders = self.db.company_holders(symbol)["data"]
+        self.on_company_holders(symbol, holders)
+
+        if depth < self._max_depth and holders and holders["holdingsTransactions"]:
+            try:
+                value_title = holders["holdingsTransactions"]["table"]["headers"]["marketValue"]
+                assert value_title == "VALUE (IN 1,000S)", value_title
+
+                for row in holders["holdingsTransactions"]["table"]["rows"]:
+                    if not row["url"]:
+                        continue
+
+                    value = to_int(row["marketValue"][1:]) * 1_000
+
+                    if value >= self._share_market_value_gte:
+                        id = int(row["url"].split("-")[-1])
+                        self.add_institution(id, depth + 1)
+            except:
+                print(json.dumps(holders, indent=2)[:10000])
+                raise
+
+    def _follow_company_insiders(self, symbol: str, depth: int):
+        insiders = self.db.company_insiders(symbol)["data"]
+        self.on_company_insiders(symbol, insiders)
+
+        if depth < self._max_depth and insiders and insiders["transactionTable"]:
+            try:
+                if get_path(insiders, "transactionTable.table.rows"):
+                    for row in insiders["transactionTable"]["table"]["rows"]:
+                        if not row["url"]:
+                            continue
+                        id = int(row["url"].split("-")[-1])
+                        self.add_insider(id, depth + 1)
+            except:
+                print(json.dumps(insiders, indent=2)[:10000])
+                raise
+
+    def _follow_institution_positions(self, id: int, depth: int):
         holdings = self.db.institution_positions(id)["data"]
         self.on_institution_positions(id, holdings)
 
-        if depth >= self._max_depth:
-            return
+        if depth < self._max_depth and holdings and holdings["institutionPositions"]:
+            try:
+                value_title = holdings["institutionPositions"]["table"]["headers"]["value"]
+                assert value_title == "Value ($1,000s)", value_title
 
-        try:
-            value_title = holdings["institutionPositions"]["table"]["headers"]["value"]
-            assert value_title == "Value ($1,000s)"
+                for row in holdings["institutionPositions"]["table"]["rows"]:
+                    if not row["url"]:
+                        continue
 
-            for row in holdings["institutionPositions"]["table"]["rows"]:
-                if not row["url"]:
-                    continue
+                    value = to_int(row["value"]) * 1_000
+                    if value >= self._share_market_value_gte:
+                        symbol = row["url"].split("/")[3]
+                        self.add_company(symbol, depth + 1)
+            except:
+                print(json.dumps(holdings, indent=2)[:10000])
+                raise
 
-                value = to_int(row["value"]) * 1_000
-                if value >= self._share_markt_value_gte:
-                    symbol = row["url"].split("/")[3]
-                    self.add_company(symbol, depth + 1)
-        except:
-            print(json.dumps(holdings, indent=2)[:10000])
-            raise
+    def _follow_insider_positions(self, id: int, depth: int):
+        data = self.db.insider_positions(id)["data"]
+        self.on_insider_positions(id, data)
 
-    def on_company_profile(self, symbol: str, data: dict):
-        pass
+        if depth < self._max_depth and data and data["filerTransactionTable"]:
+            try:
+                if get_path(data, "filerTransactionTable.rows"):
+                    for row in data["filerTransactionTable"]["rows"]:
+                        if not row["url"]:
+                            continue
 
-    def on_stock_chart(self, symbol: str, data: dict):
-        pass
+                        symbol = row["url"].split("/")[3]
+                        self.add_company(symbol, depth + 1)
 
-    def on_company_holders(self, symbol: str, data: dict):
-        pass
+                # the response for positions of an insider additionally lists
+                #   the major insiders of all companies of that insider
+                if data.get("companyInsiders"):
+                    for company in data["companyInsiders"]:
+                        for rel in company["relationInsider"]:
+                            for name, url in rel["nameURL"].items():
+                                if not url:
+                                    continue
+                                insider_id = int(url.split("-")[-1])
+                                self.add_insider(insider_id, depth + 1)
 
-    def on_institution_positions(self, id: str, data: dict):
-        pass
-
-
-def get_path(data: Optional[dict], path: str):
-    path = path.split(".")
-    while path:
-        if data is None:
-            return None
-        key = path.pop(0)
-        data = data.get(key)
-    return data
+            except:
+                print(json.dumps(data, indent=2)[:10000])
+                raise
 
 
 def to_int(x: Union[int, str]) -> int:

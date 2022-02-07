@@ -44,6 +44,13 @@ class CompanyHolders(NasdaqDBBase):
     data = Column(JSON)
 
 
+class CompanyInsiders(NasdaqDBBase):
+    __tablename__ = 'company_insiders'
+    symbol = Column(String(length=10), primary_key=True)
+    timestamp = Column(DateTime)
+    data = Column(JSON)
+
+
 class InstitutionPositions(NasdaqDBBase):
     __tablename__ = 'institutional_positions'
     id = Column(Integer, primary_key=True)
@@ -52,9 +59,19 @@ class InstitutionPositions(NasdaqDBBase):
     data = Column(JSON)
 
 
+class InsiderPositions(NasdaqDBBase):
+    __tablename__ = 'insider_positions'
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime)
+    data = Column(JSON)
+
+
 class NasdaqDatabase:
     """
     Opinionated wrapper around the NasdaqApi and a sqlite database.
+
+    This is basically thought for scraping along a graph through
+    the live API at a certain point in time (in between a few days).
     """
     def __init__(
             self,
@@ -154,19 +171,20 @@ class NasdaqDatabase:
             is_company=True,
             limit=page_size,
         )
-        num_total = int(data["data"]["holdingsTransactions"]["totalRecords"])
-        while num_total > len(data["data"]["holdingsTransactions"]["table"]["rows"]):
-            next_page = self.api.institutional_holdings(
-                id=symbol,
-                type=type,
-                is_company=True,
-                limit=page_size,
-                offset=len(data["data"]["holdingsTransactions"]["table"]["rows"]),
-            )
-            if not next_page["data"]["holdingsTransactions"]["table"].get("rows"):
-                break
-            data["data"]["holdingsTransactions"]["table"]["rows"] += \
-                next_page["data"]["holdingsTransactions"]["table"]["rows"]
+        if get_path(data, "data.holdingsTransactions.table.rows"):
+            num_total = int(data["data"]["holdingsTransactions"]["totalRecords"])
+            while num_total > len(data["data"]["holdingsTransactions"]["table"]["rows"]):
+                next_page = self.api.institutional_holdings(
+                    id=symbol,
+                    type=type,
+                    is_company=True,
+                    limit=page_size,
+                    offset=len(data["data"]["holdingsTransactions"]["table"]["rows"]),
+                )
+                if not get_path(next_page, "data.holdingsTransactions.table.rows"):
+                    break
+                data["data"]["holdingsTransactions"]["table"]["rows"] += \
+                    next_page["data"]["holdingsTransactions"]["table"]["rows"]
 
         self.db_session.add(
             CompanyHolders(
@@ -202,19 +220,25 @@ class NasdaqDatabase:
             is_company=False,
             limit=page_size,
         )
-        num_total = int(data["data"]["institutionPositions"]["totalRecords"])
-        while num_total > len(data["data"]["institutionPositions"]["table"]["rows"]):
-            next_page = self.api.institutional_holdings(
-                id=id,
-                type=type,
-                is_company=False,
-                limit=page_size,
-                offset=len(data["data"]["institutionPositions"]["table"]["rows"]),
-            )
-            if not next_page["data"]["institutionPositions"]["table"].get("rows"):
-                break
-            data["data"]["institutionPositions"]["table"]["rows"] += \
-                next_page["data"]["institutionPositions"]["table"]["rows"]
+        if get_path(data, "data.institutionPositions.table.rows"):
+            try:
+                num_total = int(data["data"]["institutionPositions"]["totalRecords"])
+            except:
+                print(json.dumps(data, indent=2))
+                raise
+
+            while num_total > len(data["data"]["institutionPositions"]["table"]["rows"]):
+                next_page = self.api.institutional_holdings(
+                    id=id,
+                    type=type,
+                    is_company=False,
+                    limit=page_size,
+                    offset=len(data["data"]["institutionPositions"]["table"]["rows"]),
+                )
+                if not get_path(next_page, "data.institutionPositions.table.rows"):
+                    break
+                data["data"]["institutionPositions"]["table"]["rows"] += \
+                    next_page["data"]["institutionPositions"]["table"]["rows"]
 
         self.db_session.add(
             InstitutionPositions(
@@ -224,3 +248,105 @@ class NasdaqDatabase:
         self.db_session.commit()
 
         return data
+
+    def company_insiders(
+            self,
+            symbol,
+            page_size: int = 300,
+    ) -> dict:
+        symbol = symbol.upper()
+
+        entry = (
+            self.db_session
+                .query(CompanyInsiders)
+                .filter(CompanyInsiders.symbol == symbol)
+        ).first()
+        if entry:
+            return entry.data
+
+        timestamp = datetime.datetime.utcnow()
+
+        data = self.api.insider_trades(
+            id=symbol,
+            limit=page_size,
+            sort_date=True,
+        )
+        if get_path(data, "data.transactionTable.table.rows"):
+            num_total = int(data["data"]["transactionTable"]["totalRecords"])
+            while num_total > len(data["data"]["transactionTable"]["table"]["rows"]):
+                next_page = self.api.insider_trades(
+                    id=symbol,
+                    sort_date=True,
+                    limit=page_size,
+                    offset=len(data["data"]["transactionTable"]["table"]["rows"]),
+                )
+                if not get_path(next_page, "data.transactionTable.table.rows"):
+                    break
+                data["data"]["transactionTable"]["table"]["rows"] += \
+                    next_page["data"]["transactionTable"]["table"]["rows"]
+
+        self.db_session.add(
+            CompanyInsiders(
+                symbol=symbol, timestamp=timestamp, data=data,
+            )
+        )
+        self.db_session.commit()
+
+        return data
+
+    def insider_positions(
+            self,
+            id: Union[int, str],
+            page_size: int = 300,
+    ) -> dict:
+        id = int(id)
+
+        entry = (
+            self.db_session
+                .query(InsiderPositions)
+                .filter(InsiderPositions.id == id)
+        ).first()
+        if entry:
+            return entry.data
+
+        timestamp = datetime.datetime.utcnow()
+
+        data = self.api.insider_trades(
+            id=id,
+            limit=page_size,
+        )
+
+        page = 1
+        # we don't have a total count here, so try to load the next page if we
+        #   got exactly the number of max rows
+        if get_path(data, "data.filerTransactionTable.rows"):
+            while len(data["data"]["filerTransactionTable"]["rows"]) == page_size * page:
+                next_page = self.api.insider_trades(
+                    id=id,
+                    limit=page_size,
+                    offset=len(data["data"]["filerTransactionTable"]["rows"]),
+                )
+                if not get_path(next_page, "data.filerTransactionTable.rows"):
+                    break
+                data["data"]["filerTransactionTable"]["rows"] += \
+                    next_page["data"]["filerTransactionTable"]["rows"]
+                page += 1
+
+        self.db_session.add(
+            InsiderPositions(
+                id=id, timestamp=timestamp, data=data,
+            )
+        )
+        self.db_session.commit()
+
+        return data
+
+
+def get_path(data: Optional[dict], path: str):
+    path = path.split(".")
+    while path:
+        if data is None:
+            return None
+        key = path.pop(0)
+        data = data.get(key)
+    return data
