@@ -27,6 +27,7 @@ class NasdaqApi:
             "referer":  "https://www.nasdaq.com/",
             "origin":  "https://www.nasdaq.com/",
             "host": "api.nasdaq.com",
+            "connection": "keep-alive",
             "accept": "Accept: application/json, text/plain, */*",
             "accept-language": "en-US,en;q=0.5",
             "accept-encoding": "gzip, deflate, br",
