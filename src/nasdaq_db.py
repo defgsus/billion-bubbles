@@ -3,8 +3,9 @@ import time
 import json
 import datetime
 from pathlib import Path
-from typing import Union, Generator, Tuple, Optional
+from typing import Union, Generator, Tuple, Optional, Type
 
+from tqdm import tqdm
 from sqlalchemy import (
     create_engine, select,
     Column, String, Integer, ForeignKey, JSON, Date, DateTime
@@ -78,6 +79,7 @@ class NasdaqDatabase:
             database_filename: Union[str, Path],
             verbose: bool = True,
     ):
+        self.verbose = verbose
         self.api = NasdaqApi(verbose=verbose)
         self.db_engine = create_engine(f"sqlite:///{database_filename}")
         self.db_session: Session = sessionmaker(bind=self.db_engine)()
@@ -340,6 +342,58 @@ class NasdaqDatabase:
         self.db_session.commit()
 
         return data
+
+    def iter_objects(
+            self,
+            company_profile: bool = True,
+            company_holders: bool = True,
+            company_insiders: bool = True,
+            stock_chart: bool = True,
+            institution_positions: bool = True,
+            insider_positions: bool = True,
+            batch_size: int = 1000,
+    ) -> Generator[dict, None, None]:
+        """
+        Yield all objects from the database, each as dict
+        """
+        if company_profile:
+            yield from self._iter_objects(CompanyProfile, batch_size=batch_size)
+        if stock_chart:
+            yield from self._iter_objects(StockChart, batch_size=batch_size)
+        if company_holders:
+            yield from self._iter_objects(CompanyHolders, batch_size=batch_size)
+        if company_insiders:
+            yield from self._iter_objects(CompanyInsiders, batch_size=batch_size)
+        if institution_positions:
+            yield from self._iter_objects(InstitutionPositions, batch_size=batch_size)
+        if insider_positions:
+            yield from self._iter_objects(InsiderPositions, batch_size=batch_size)
+
+    def _iter_objects(
+            self,
+            model: Type[NasdaqDBBase],
+            batch_size: int = 1000,
+    ) -> Generator[dict, None, None]:
+
+        field_names = [c.name for c in model.__table__.columns]
+        order_field = field_names[0]
+
+        query = (
+            self.db_session
+            .query(*(getattr(model, fn) for fn in field_names))
+            .order_by(getattr(model, order_field))
+        )
+
+        count = query.count()
+        iterable = range(0, count, batch_size)
+        if self.verbose:
+            iterable = tqdm()
+        for i in iterable:
+            for row in query.offset(i).limit(batch_size).all():
+                yield {
+                    "type": model.__table__.name,
+                    "data": {fn: value for fn, value in zip(field_names, row)},
+                }
 
 
 def get_path(data: Optional[dict], path: str):

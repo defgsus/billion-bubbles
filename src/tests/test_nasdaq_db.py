@@ -73,13 +73,13 @@ class TestNasdaqDatabase(unittest.TestCase):
             if db_filename.exists():
                 os.remove(db_filename)
 
-    def test_holdings(self):
+    def test_holders(self):
         db_filename = Path(tempfile.gettempdir()) / f"billion-bubbles-{secrets.token_hex(10)}.sqlite3"
         try:
             nasdaq = NasdaqDatabase(db_filename, verbose=True)
             nasdaq.api = FakeApi()
 
-            data = nasdaq.company_holdings("BOLD", page_size=100)
+            data = nasdaq.company_holders("BOLD", page_size=100)
             self.assertEqual(
                 [{"index": i} for i in range(150)],
                 data["data"]["holdingsTransactions"]["table"]["rows"],
@@ -93,13 +93,41 @@ class TestNasdaqDatabase(unittest.TestCase):
             nasdaq.api = FakeApi()
 
             for i in range(2):
-                data = nasdaq.company_holdings("BOLD", page_size=100)
+                data = nasdaq.company_holders("BOLD", page_size=100)
                 self.assertEqual(
                     [{"index": i} for i in range(150)],
                     data["data"]["holdingsTransactions"]["table"]["rows"],
                 )
                 # no requests thistime
                 self.assertEqual(0, nasdaq.api.num_calls)
+
+        finally:
+            if db_filename.exists():
+                os.remove(db_filename)
+
+    def test_iter_objects(self):
+        db_filename = Path(tempfile.gettempdir()) / f"billion-bubbles-{secrets.token_hex(10)}.sqlite3"
+        try:
+            nasdaq = NasdaqDatabase(db_filename)
+            nasdaq.api = FakeApi()
+
+            all_symbols = set()
+            for i in range(100):
+                profile = nasdaq.company_profile(f"S{i}")
+                all_symbols.add(f"S{i}")
+
+            self.assertEqual(100, nasdaq.api.num_calls)
+
+            for obj in nasdaq.iter_objects(batch_size=30):
+                obj["data"].pop("timestamp")
+                symbol = obj["data"]["symbol"]
+                self.assertEqual(
+                    {"type": "company_profile", "data": {"symbol": symbol, "data": {"symbol": symbol}}},
+                    obj
+                )
+                all_symbols.remove(symbol)
+
+            self.assertFalse(all_symbols)
 
         finally:
             if db_filename.exists():
