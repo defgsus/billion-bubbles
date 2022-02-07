@@ -26,6 +26,7 @@ class NasdaqApi:
             "user-agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0",
             "referer":  "https://www.nasdaq.com/",
             "origin":  "https://www.nasdaq.com/",
+            "host": "api.nasdaq.com",
             "accept": "Accept: application/json, text/plain, */*",
             "accept-language": "en-US,en;q=0.5",
             "accept-encoding": "gzip, deflate, br",
