@@ -78,17 +78,17 @@ def export_ndjson(db: NasdaqDatabase, filename: str):
 
         iterable = tqdm(iterable, total=num_objects, desc="exporting")
 
-    def _export(fp):
+    def _export(fp, iterable):
         for obj in iterable:
             fp.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
             fp.write("\n")
 
     if filename.lower().endswith(".gz"):
         with io.TextIOWrapper(io.BufferedWriter(gzip.open(filename, "wb"))) as fp:
-            _export(fp)
+            _export(fp, iterable)
     else:
         with open(filename, "wt") as fp:
-            _export(fp)
+            _export(fp, iterable)
 
 def import_ndjson(db: NasdaqDatabase, filename: str):
     report = db.import_objects(iter_ndjson(filename))

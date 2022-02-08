@@ -402,8 +402,6 @@ class NasdaqDatabase:
 
         count = query.count()
         iterable = range(0, count, batch_size)
-        if self.verbose:
-            iterable = tqdm()
         for i in iterable:
             for row in query.offset(i).limit(batch_size).all():
                 yield {
