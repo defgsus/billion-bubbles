@@ -2,6 +2,7 @@ import json
 import argparse
 import datetime
 import gzip
+import io
 import codecs
 from pathlib import Path
 from typing import Optional, List
@@ -77,11 +78,17 @@ def export_ndjson(db: NasdaqDatabase, filename: str):
 
         iterable = tqdm(iterable, total=num_objects, desc="exporting")
 
-    with open(filename, "wt") as fp:
+    def _export(fp):
         for obj in iterable:
             fp.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
             fp.write("\n")
 
+    if filename.lower().endswith(".gz"):
+        with io.TextIOWrapper(io.BufferedWriter(gzip.open(filename, "wb"))) as fp:
+            _export(fp)
+    else:
+        with open(filename, "wt") as fp:
+            _export(fp)
 
 def import_ndjson(db: NasdaqDatabase, filename: str):
     report = db.import_objects(iter_ndjson(filename))
