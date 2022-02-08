@@ -22,7 +22,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
         "is_officer": 0,
         "is_10percent": 0,
         "total_shares": 0.,
-        "total_holdings_million_dollar": 0,
+        "total_holdings_dollar": 0,
         "sale_price": 0.,
     }
     
@@ -91,7 +91,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
         value = get_path(data, "ownershipSummary.TotalHoldingsValue")
         if value:
             assert value["label"] == "Total Value of Holdings (millions)", value
-            self.vertex(symbol)["total_holdings_million_dollar"] = to_int(value["value"][1:])
+            self.vertex(symbol)["total_holdings_dollar"] = to_int(value["value"][1:]) * 1_000_000
 
         rows = get_path(data, "holdingsTransactions.table.rows")
         if rows:
@@ -136,6 +136,11 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
                 shares_percent = 0.
                 if company_total_shares:
                     shares_percent = shares / company_total_shares * 100
+                    # TODO: there are a lot of insiders who hold more
+                    #   than the reported shares
+                    if shares_percent > 100:
+                        #print(shares_percent, row, self.vertex(symbol))
+                        shares_percent = 100.
 
                 self.vertex(insider_id).update({
                     "label": row["insider"],
@@ -157,7 +162,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
             self.vertex(symbol).update({
                 "sale_price": sale_price
             })
-        except ValueError:
+        except (TypeError, ValueError):
             pass
 
     def on_institution_positions(self, id: int, data: Optional[dict]):

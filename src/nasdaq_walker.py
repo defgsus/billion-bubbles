@@ -4,7 +4,7 @@ import hashlib
 from typing import Optional, Union
 
 from .nasdaq_db import NasdaqDatabase
-from .util import get_path, unsorted_sort_key, to_int
+from .util import get_path, to_int
 
 
 class NasdaqWalkerInterface:
@@ -39,6 +39,7 @@ class NasdaqWalkerInterface:
         """
         pass
 
+
 class NasdaqWalker:
     """
     A tree-like walker through NasdaqDatabase objects.
@@ -51,9 +52,10 @@ class NasdaqWalker:
             stock_charts: bool = True,
             follow_holders: bool = True,
             follow_insiders: bool = True,
-            max_depth: int = 0,
+            max_depth_holder: int = 0,
+            max_depth_insider: int = 0,
             share_market_value_gte: int = 0,
-
+            sort_order: str = "",
     ):
         self.db = db
         self._interface = interface
@@ -61,7 +63,9 @@ class NasdaqWalker:
         self._do_follow_holders = follow_holders
         self._do_follow_insiders = follow_insiders
         self._share_market_value_gte = share_market_value_gte
-        self._max_depth = max_depth
+        self._max_depth_holder = max_depth_holder
+        self._max_depth_insider = max_depth_insider
+        self._sort_order = sort_order
         self._todo_company = dict()
         self._todo_institution = dict()
         self._todo_insiders = dict()
@@ -140,11 +144,14 @@ class NasdaqWalker:
                 f", {self.status_string()}"
             )
 
+    def _unsorted_sort_key(self, x: Union[int, str]) -> str:
+        return hashlib.sha256(f"{x}{self._sort_order}".encode()).hexdigest()
+
     def _follow_company(self):
         if not self._todo_company:
             return
 
-        symbol = sorted(self._todo_company, key=unsorted_sort_key)[0]
+        symbol = sorted(self._todo_company, key=self._unsorted_sort_key)[0]
         depth = self._todo_company[symbol]
         del self._todo_company[symbol]
         self._num_companies += 1
@@ -172,7 +179,7 @@ class NasdaqWalker:
         if not self._todo_institution:
             return
 
-        id = sorted(self._todo_institution, key=unsorted_sort_key)[0]
+        id = sorted(self._todo_institution, key=self._unsorted_sort_key)[0]
         depth = self._todo_institution[id]
         del self._todo_institution[id]
         self._num_institutions += 1
@@ -184,7 +191,7 @@ class NasdaqWalker:
         if not self._todo_insiders:
             return
 
-        id = sorted(self._todo_insiders, key=unsorted_sort_key)[0]
+        id = sorted(self._todo_insiders, key=self._unsorted_sort_key)[0]
         depth = self._todo_insiders[id]
         del self._todo_insiders[id]
         self._num_insiders += 1
@@ -201,7 +208,7 @@ class NasdaqWalker:
                 print(json.dumps(holders, indent=2)[:10000])
                 raise
 
-        if depth < self._max_depth and get_path(holders, "holdingsTransactions.table.rows"):
+        if depth < self._max_depth_holder and get_path(holders, "holdingsTransactions.table.rows"):
             try:
                 value_title = get_path(holders, "holdingsTransactions.table.headers.marketValue")
                 assert value_title == "VALUE (IN 1,000S)", value_title
@@ -228,7 +235,7 @@ class NasdaqWalker:
                 print(json.dumps(insiders, indent=2)[:10000])
                 raise
 
-        if depth < self._max_depth and get_path(insiders, "transactionTable.table.rows"):
+        if depth < self._max_depth_insider and get_path(insiders, "transactionTable.table.rows"):
             try:
                 for row in get_path(insiders, "transactionTable.table.rows"):
                     if not row["url"]:
@@ -248,7 +255,7 @@ class NasdaqWalker:
                 print(json.dumps(holdings, indent=2)[:10000])
                 raise
 
-        if depth < self._max_depth and get_path(holdings, "institutionPositions.table.rows"):
+        if depth < self._max_depth_holder and get_path(holdings, "institutionPositions.table.rows"):
             try:
                 value_title = get_path(holdings, "institutionPositions.table.headers.value")
                 assert value_title == "Value ($1,000s)", value_title
@@ -274,7 +281,7 @@ class NasdaqWalker:
                 print(json.dumps(data, indent=2)[:10000])
                 raise
 
-        if depth < self._max_depth and get_path(data, "filerTransactionTable.rows"):
+        if depth < self._max_depth_insider and get_path(data, "filerTransactionTable.rows"):
             try:
                 for row in get_path(data, "filerTransactionTable.rows"):
                     if not row["url"]:

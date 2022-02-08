@@ -1,4 +1,3 @@
-import hashlib
 import json
 import io
 import gzip
@@ -45,10 +44,6 @@ def to_float(x: Union[int, str]) -> float:
     elif isinstance(x, (int, float)):
         return float(x)
     raise TypeError(f"Got '{type(x).__name__}'")
-
-
-def unsorted_sort_key(x: Union[int, str]):
-    return hashlib.sha256(str(x).encode()).hexdigest()
 
 
 def iter_ndjson(file: Union[str, Path, IO], raise_error: bool = True, skip: int = 0) -> Generator[dict, None, None]:

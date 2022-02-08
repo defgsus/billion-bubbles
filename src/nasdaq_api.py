@@ -48,6 +48,7 @@ class NasdaqApi:
                         print(f"requesting {url}", file=sys.stderr)
                     else:
                         print(f"\nretry {i} request {url}", file=sys.stderr)
+
                 response = self.session.get(url, **kwargs)
                 if clear_cookies:
                     self.session.cookies.clear()
@@ -60,7 +61,7 @@ class NasdaqApi:
                 if i + 1 == self.REQUEST_RETRIES:
                     raise
                 kwargs["timeout"] += 5
-                time.sleep(.5)
+                time.sleep(i)
 
     def search(self, query: str):
         url = f"https://api.nasdaq.com/api/autocomplete/slookup/10"

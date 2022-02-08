@@ -33,12 +33,24 @@ def parse_args() -> dict:
         help=f"Name of database file, defaults to {DEFAULT_DB_NAME}",
     )
     parser.add_argument(
-        "-d", "--depth", type=int, nargs="?", default=1,
+        "-d", "--depth", type=int, nargs="?", default=0,
         help=f"Maximum traversal depth",
+    )
+    parser.add_argument(
+        "-dh", "--depth-holder", type=int, nargs="?", default=None,
+        help=f"Maximum traversal depth for holder relationships. Overrides --depth",
+    )
+    parser.add_argument(
+        "-di", "--depth-insider", type=int, nargs="?", default=None,
+        help=f"Maximum traversal depth for insider relationships. Overrides --depth",
     )
     parser.add_argument(
         "-ms", "--min-share-value", type=int, nargs="?", default=100_000_000,
         help=f"Minimum holder/position share value in dollars to follow",
+    )
+    parser.add_argument(
+        "-so", "--sort-order", type=str, nargs="?", default="",
+        help=f"Any string (default "") changes the 'random' sort order of symbol/ID traversal",
     )
     parser.add_argument(
         "-o", "--output", type=str, nargs="?", default=None,
@@ -56,7 +68,10 @@ def walk(
         institution: List[int],
         insider: List[int],
         depth: int,
+        depth_holder: Optional[int],
+        depth_insider: Optional[int],
         min_share_value: int,
+        sort_order: str,
         database: str,
         output: str,
         verbose: bool,
@@ -72,8 +87,10 @@ def walk(
 
     walker = NasdaqWalker(
         db=db,
-        max_depth=depth,
+        max_depth_holder=depth if depth_holder is None else depth_holder,
+        max_depth_insider=depth if depth_insider is None else depth_insider,
         share_market_value_gte=min_share_value,
+        sort_order=sort_order,
         interface=graph_builder,
     )
     for i in company:

@@ -6,6 +6,8 @@ from typing import Optional, List, Dict, Callable
 
 import igraph
 
+from src.graph_util import filter_graph
+
 
 def parse_args() -> dict:
     parser = argparse.ArgumentParser()
@@ -14,8 +16,16 @@ def parse_args() -> dict:
         help=f"graph input filename",
     )
     parser.add_argument(
-        "output", type=str, nargs="?", default=None,
+        "-o", "--output", type=str, nargs="?", default=None,
         help=f"graph output filename",
+    )
+    parser.add_argument(
+        "-ef", "--edge-filter", type=str, nargs="*", default=[],
+        help=f"Filter for edges, e.g. 'weight__gt=.2'",
+    )
+    parser.add_argument(
+        "-vf", "--vertex-filter", type=str, nargs="*", default=[],
+        help=f"Filter for vertices, e.g. 'degree_in__gt=3'",
     )
     return vars(parser.parse_args())
 
@@ -23,11 +33,52 @@ def parse_args() -> dict:
 def main(
         input: str,
         output: Optional[str],
+        vertex_filter: List[str],
+        edge_filter: List[str],
 ):
-    graph = igraph.read(input)
+    graph: igraph.Graph = igraph.read(input)
+
+    num_nodes, num_edges = len(graph.vs), len(graph.es)
+    print(f"graph size: {num_nodes:,} x {num_edges:,}")
+
     add_typical_measures(graph, "full_")
 
+    if vertex_filter or edge_filter:
+        apply_filters(graph, vertex_filter, edge_filter)
+        f_num_nodes, f_num_edges = len(graph.vs), len(graph.es)
+        print(f"filtered graph size: {f_num_nodes:,} x {f_num_edges:,}")
+
+        add_typical_measures(graph, "final_")
+
     dump_graph(graph)
+
+    if output:
+        graph.write(output)
+
+
+def apply_filters(graph, vertex_filter: List[str], edge_filter: [str]):
+    def _parse_filter(filter_list):
+        filter_dict = {}
+        for filter_arg in filter_list:
+            try:
+                key, value = filter_arg.split("=")
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass
+                filter_dict[key] = value
+            except:
+                print(f"Invalid filter argument '{filter_arg}'")
+                exit(1)
+        return filter_dict
+
+    vertex_filter = _parse_filter(vertex_filter)
+    edge_filter = _parse_filter(edge_filter)
+    filter_graph(
+        graph,
+        vertex_filters=vertex_filter,
+        edge_filters=edge_filter,
+    )
 
 
 def add_typical_measures(graph: igraph.Graph, prefix: str):
@@ -67,38 +118,6 @@ def dump_graph(graph: igraph.Graph):
     for key, (min_, max_, mean)  in report.items():
         print(f"{key:40}: {min_:24,.6f} {max_:24,.6f} {mean:24,.6f}")
 
-
-
-def filter_graph(
-        graph: igraph.Graph,
-        edge_weight_gte: float = 0.,
-        edge_attribute: Optional[Dict[str, Callable]] = None,
-        degree_gte: int = 0,
-) -> None:
-    num_nodes, num_edges = len(graph.vs), len(graph.es)
-    if edge_weight_gte:
-        graph.delete_edges([
-            i for i, w in enumerate(graph.es["weight"])
-            if w < edge_weight_gte
-        ])
-
-    if edge_attribute:
-        edges_to_delete = set()
-        for key, func in edge_attribute.items():
-            for i, value in enumerate(graph.es[key]):
-                if not func(value):
-                    edges_to_delete.add(i)
-        if edges_to_delete:
-            graph.delete_edges(sorted(edges_to_delete))
-
-    if degree_gte:
-        graph.delete_vertices([
-            i for i, (d_in, d_out) in enumerate(zip(graph.indegree(), graph.outdegree()))
-            if d_in + d_out < degree_gte
-        ])
-
-    f_num_nodes, f_num_edges = len(graph.vs), len(graph.es)
-    print(f"filtered {num_nodes}x{num_edges} -> {f_num_nodes}x{f_num_edges}")
 
 
 if __name__ == "__main__":
