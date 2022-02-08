@@ -5,7 +5,7 @@ from typing import Optional, Union
 import igraph
 
 from .nasdaq_walker import NasdaqWalkerInterface
-from .util import get_path, to_id, to_int
+from .util import get_path, to_id, to_int, to_float
 
 
 class NasdaqGraphBuilder(NasdaqWalkerInterface):
@@ -21,18 +21,20 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
         "is_director": 0,
         "is_officer": 0,
         "is_10percent": 0,
-        "total_shares": 0,
+        "total_shares": 0.,
         "total_holdings_million_dollar": 0,
+        "sale_price": 0.,
     }
     
     DEFAULT_EDGE = {
         "type": None,
         "relation": None,
         "own_type": None,
-        "weight": 0,
+        "weight": 0.,
         "date": None,
-        "shares": 0,
-        "shares_percent": 0,
+        "shares": 0.,
+        "shares_percent": 0.,
+        "shares_dollar": 0.,
     }
 
     RELATION_MAP = {
@@ -106,10 +108,11 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
 
                 edge = self.edge(institution_id, symbol, "holder")
                 edge.update({
-                    "shares": to_int(row["sharesHeld"]),
+                    "shares": float(to_int(row["sharesHeld"])),
                     "relation": "holder",
                     "own_type": "holder",
                     "date": row["date"],
+                    "shares_dollar": float(to_int(row["marketValue"][1:])),
                 })
                 if company_total_shares:
                     edge["shares_percent"] = edge["shares"] / company_total_shares * 100
@@ -126,17 +129,36 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
 
                 relation = f'insider-{row["ownType"]}-{row["relation"]}'
 
+                company_total_shares = self.vertex(symbol)["total_shares"]
+                sale_price = self.vertex(symbol)["sale_price"]
+
+                shares = float(to_int(row["sharesHeld"]))
+                shares_percent = 0.
+                if company_total_shares:
+                    shares_percent = shares / company_total_shares * 100
+
                 self.vertex(insider_id).update({
                     "label": row["insider"],
                     "type": "insider",
                 })
                 self.edge(insider_id, symbol, relation).update({
-                    "shares": to_int(row["sharesHeld"]),
+                    "shares": shares,
+                    "shares_dollar": shares * sale_price,
+                    "shares_percent": shares_percent,
+                    "weight": shares_percent / 100.,
                     "date": row["lastDate"],
+                    "own_type": row["ownType"],
+                    "relation": row["relation"],
                 })
 
     def on_stock_chart(self, symbol: str, data: dict):
-        pass
+        try:
+            sale_price = to_float(data["lastSalePrice"][1:])
+            self.vertex(symbol).update({
+                "sale_price": sale_price
+            })
+        except ValueError:
+            pass
 
     def on_institution_positions(self, id: int, data: Optional[dict]):
         pass
@@ -175,7 +197,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
                     "type": "company",
                 })
                 self.edge(id, company_id, f"insider-{own_type}-{relation}").update({
-                    "shares": to_int(row["sharesHeld"]),
+                    "shares": float(to_int(row["sharesHeld"])),
                     "date": row["lastDate"],
                 })
 
@@ -185,11 +207,11 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
             vertex_to = self.vertex_map[id_to]
 
             if type == "Director":
-                vertex_to["is_director"] = 1
+                vertex_to["is_director"] += 1
             elif type == "Officer":
-                vertex_to["is_officer"] = 1
+                vertex_to["is_officer"] += 1
             if type.startswith("Beneficial"):
-                vertex_to["is_10percent"] = 1
+                vertex_to["is_10percent"] += 1
 
             vertex_from["total_shares"] += edge["shares"]
 

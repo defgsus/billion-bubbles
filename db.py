@@ -90,6 +90,7 @@ def export_ndjson(db: NasdaqDatabase, filename: str):
         with open(filename, "wt") as fp:
             _export(fp, iterable)
 
+
 def import_ndjson(db: NasdaqDatabase, filename: str):
     report = db.import_objects(iter_ndjson(filename))
 

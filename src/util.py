@@ -37,6 +37,16 @@ def to_int(x: Union[int, str]) -> int:
     raise TypeError(f"Got '{type(x).__name__}'")
 
 
+def to_float(x: Union[int, str]) -> float:
+    if isinstance(x, str):
+        if not x:
+            return 0
+        return float(x.replace(",", ""))
+    elif isinstance(x, (int, float)):
+        return float(x)
+    raise TypeError(f"Got '{type(x).__name__}'")
+
+
 def unsorted_sort_key(x: Union[int, str]):
     return hashlib.sha256(str(x).encode()).hexdigest()
 

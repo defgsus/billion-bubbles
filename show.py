@@ -1,4 +1,5 @@
 import json
+import datetime
 import argparse
 from pathlib import Path
 from src.nasdaq_db import NasdaqDatabase
@@ -6,20 +7,22 @@ from src.nasdaq_api import NasdaqApi
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
+DEFAULT_DB_NAME = PROJECT_DIR / datetime.date.today().strftime("nasdaq-%Y-%m.sqlite3")
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "what", type=str,
-        choices=["profile", "positions", "holders", "insider-positions", "insiders"],
+        choices=["profile", "positions", "holders", "insider-positions", "insiders", "stock-chart"],
     )
     parser.add_argument(
         "id", type=str,
         help="ID or trading symbol",
     )
     parser.add_argument(
-        "--db", type=str, nargs="?",
-        help="Name of database file",
+        "--db", type=str, nargs="?", default=str(DEFAULT_DB_NAME),
+        help=f"Name of database file, defaults to '{DEFAULT_DB_NAME}'",
     )
     parser.add_argument(
         "--api", type=bool, nargs="?", default=False, const=True,
@@ -59,6 +62,8 @@ def main():
             data = db.company_insiders(args.id)
         elif args.what == "insider-positions":
             data = db.insider_positions(args.id)
+        elif args.what == "stock-chart":
+            data = db.stock_chart(args.id)
         else:
             raise ValueError(f"Unknown thing '{args.what}'")
 
