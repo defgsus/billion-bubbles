@@ -14,7 +14,7 @@ from sqlalchemy.orm import relationship, backref, sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
 
 from .nasdaq_api import NasdaqApi
-
+from .util import get_path
 
 NasdaqDBBase = declarative_base()
 
@@ -163,7 +163,7 @@ class NasdaqDatabase:
                 .filter(CompanyHolders.symbol == symbol)
         ).first()
         if entry:
-            return entry.data
+            return self._fix_date(entry.data, "data.holdingsTransactions.table.rows", "date", False)
 
         timestamp = datetime.datetime.utcnow()
 
@@ -195,7 +195,7 @@ class NasdaqDatabase:
         )
         self.db_session.commit()
 
-        return data
+        return self._fix_date(data, "data.holdingsTransactions.table.rows", "date", False)
 
     def institution_positions(
             self,
@@ -264,7 +264,7 @@ class NasdaqDatabase:
                 .filter(CompanyInsiders.symbol == symbol)
         ).first()
         if entry:
-            return entry.data
+            return self._fix_date(entry.data, "data.transactionTable.table.rows", "lastDate", False)
 
         timestamp = datetime.datetime.utcnow()
 
@@ -294,7 +294,7 @@ class NasdaqDatabase:
         )
         self.db_session.commit()
 
-        return data
+        return self._fix_date(data, "data.transactionTable.table.rows", "lastDate", False)
 
     def insider_positions(
             self,
@@ -309,7 +309,7 @@ class NasdaqDatabase:
                 .filter(InsiderPositions.id == id)
         ).first()
         if entry:
-            return entry.data
+            return self._fix_date(entry.data, "data.filterTransactionTable.rows", "lastDate", False)
 
         timestamp = datetime.datetime.utcnow()
 
@@ -340,6 +340,22 @@ class NasdaqDatabase:
             )
         )
         self.db_session.commit()
+
+        return self._fix_date(data, "data.filterTransactionTable.rows", "lastDate", False)
+
+    def _fix_date(self, data: dict, rows_path: str, field: str, sort: bool):
+        """
+        For whatever reason the date is month/day/year,
+        change it to year/month/day to make it sortable
+        """
+        rows: list = get_path(data, rows_path)
+        if rows:
+            for row in rows:
+                date = row[field].split("/")
+                row[field] = "/".join(date[-1:] + date[:2])
+
+            if sort:
+                rows.sort(key=lambda row: row[field], reverse=True)
 
         return data
 
@@ -395,12 +411,3 @@ class NasdaqDatabase:
                     "data": {fn: value for fn, value in zip(field_names, row)},
                 }
 
-
-def get_path(data: Optional[dict], path: str):
-    path = path.split(".")
-    while path:
-        if data is None:
-            return None
-        key = path.pop(0)
-        data = data.get(key)
-    return data

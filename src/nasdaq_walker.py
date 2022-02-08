@@ -3,8 +3,41 @@ import time
 import hashlib
 from typing import Optional, Union
 
-from .nasdaq_db import NasdaqDatabase, get_path
+from .nasdaq_db import NasdaqDatabase
+from .util import get_path, unsorted_sort_key, to_int
 
+
+class NasdaqWalkerInterface:
+    """
+    Override and pass to NasdaqWalker constructor to receive each *walked* object.
+
+    All the API and database caching trouble finally leads
+    to this nice tidy place.
+    """
+    def on_company_profile(self, symbol: str, data: dict):
+        pass
+
+    def on_company_holders(self, symbol: str, data: Optional[dict]):
+        pass
+
+    def on_company_insiders(self, symbol: str, data: Optional[dict]):
+        pass
+
+    def on_stock_chart(self, symbol: str, data: dict):
+        pass
+
+    def on_institution_positions(self, id: int, data: Optional[dict]):
+        pass
+
+    def on_insider_positions(self, id: int, data: Optional[dict]):
+        pass
+
+    def finalize(self):
+        """
+        Called before the `NasdaqWalker.run` method returns.
+        All objects are sent at this time.
+        """
+        pass
 
 class NasdaqWalker:
     """
@@ -14,6 +47,7 @@ class NasdaqWalker:
     def __init__(
             self,
             db: NasdaqDatabase,
+            interface: Optional[NasdaqWalkerInterface] = None,
             stock_charts: bool = True,
             follow_holders: bool = True,
             follow_insiders: bool = True,
@@ -22,6 +56,7 @@ class NasdaqWalker:
 
     ):
         self.db = db
+        self._interface = interface
         self._do_stock_charts = stock_charts
         self._do_follow_holders = follow_holders
         self._do_follow_insiders = follow_insiders
@@ -82,6 +117,9 @@ class NasdaqWalker:
             self._dump_status()
             self._follow_insider()
 
+        if self._interface:
+            self._interface.finalize()
+
     def status_string(self) -> str:
         return (
             f"todo: (company/institution/insider)"
@@ -90,26 +128,6 @@ class NasdaqWalker:
             f", duplicates: {self._num_duplicate_companies:,}/{self._num_duplicate_institutions:,}"
             f"/{self._num_duplicate_insiders:,}"
         )
-
-    # --- these are called by the run method, ready to override ---
-
-    def on_company_profile(self, symbol: str, data: dict):
-        pass
-
-    def on_company_holders(self, symbol: str, data: Optional[dict]):
-        pass
-
-    def on_company_insiders(self, symbol: str, data: Optional[dict]):
-        pass
-
-    def on_stock_chart(self, symbol: str, data: dict):
-        pass
-
-    def on_institution_positions(self, id: int, data: Optional[dict]):
-        pass
-
-    def on_insider_positions(self, id: int, data: Optional[dict]):
-        pass
 
     # --- private ---
 
@@ -132,11 +150,17 @@ class NasdaqWalker:
         self._num_companies += 1
 
         profile = self.db.company_profile(symbol)["data"]
-        self.on_company_profile(symbol, profile)
+        if self._interface:
+            try:
+                self._interface.on_company_profile(symbol, profile)
+            except:
+                print(json.dumps(profile, indent=2)[:10000])
+                raise
 
         if self._do_stock_charts:
             chart = self.db.stock_chart(symbol)["data"]
-            self.on_stock_chart(symbol, chart)
+            if self._interface:
+                self._interface.on_stock_chart(symbol, chart)
 
         if self._do_follow_holders:
             self._follow_company_holders(symbol, depth)
@@ -170,7 +194,12 @@ class NasdaqWalker:
 
     def _follow_company_holders(self, symbol: str, depth: int):
         holders = self.db.company_holders(symbol)["data"]
-        self.on_company_holders(symbol, holders)
+        if self._interface:
+            try:
+                self._interface.on_company_holders(symbol, holders)
+            except:
+                print(json.dumps(holders, indent=2)[:10000])
+                raise
 
         if depth < self._max_depth and get_path(holders, "holdingsTransactions.table.rows"):
             try:
@@ -192,7 +221,12 @@ class NasdaqWalker:
 
     def _follow_company_insiders(self, symbol: str, depth: int):
         insiders = self.db.company_insiders(symbol)["data"]
-        self.on_company_insiders(symbol, insiders)
+        if self._interface:
+            try:
+                self._interface.on_company_insiders(symbol, insiders)
+            except:
+                print(json.dumps(insiders, indent=2)[:10000])
+                raise
 
         if depth < self._max_depth and get_path(insiders, "transactionTable.table.rows"):
             try:
@@ -207,7 +241,12 @@ class NasdaqWalker:
 
     def _follow_institution_positions(self, id: int, depth: int):
         holdings = self.db.institution_positions(id)["data"]
-        self.on_institution_positions(id, holdings)
+        if self._interface:
+            try:
+                self._interface.on_institution_positions(id, holdings)
+            except:
+                print(json.dumps(holdings, indent=2)[:10000])
+                raise
 
         if depth < self._max_depth and get_path(holdings, "institutionPositions.table.rows"):
             try:
@@ -228,7 +267,12 @@ class NasdaqWalker:
 
     def _follow_insider_positions(self, id: int, depth: int):
         data = self.db.insider_positions(id)["data"]
-        self.on_insider_positions(id, data)
+        if self._interface:
+            try:
+                self._interface.on_insider_positions(id, data)
+            except:
+                print(json.dumps(data, indent=2)[:10000])
+                raise
 
         if depth < self._max_depth and get_path(data, "filerTransactionTable.rows"):
             try:
@@ -254,16 +298,3 @@ class NasdaqWalker:
                 print(json.dumps(data, indent=2)[:10000])
                 raise
 
-
-def to_int(x: Union[int, str]) -> int:
-    if isinstance(x, str):
-        if not x:
-            return 0
-        return int(x.replace(",", ""))
-    elif isinstance(x, int):
-        return x
-    raise TypeError(f"Got '{type(x).__name__}'")
-
-
-def unsorted_sort_key(x: Union[int, str]):
-    return hashlib.sha256(str(x).encode()).hexdigest()

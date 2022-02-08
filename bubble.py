@@ -6,6 +6,7 @@ from typing import Optional, List
 
 from src.nasdaq_db import NasdaqDatabase
 from src.nasdaq_walker import NasdaqWalker
+from src.nasdaq_graph import NasdaqGraphBuilder
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -40,6 +41,10 @@ def parse_args() -> dict:
         help=f"Minimum holder/position share value in dollars to follow",
     )
     parser.add_argument(
+        "-o", "--output", type=str, nargs="?", default=None,
+        help=f"If provided, the resulting graph is written to this file",
+    )
+    parser.add_argument(
         "-v", "--verbose", type=bool, nargs="?", default=False, const=True,
         help=f"Log all web-requests and such",
     )
@@ -53,6 +58,7 @@ def walk(
         depth: int,
         min_share_value: int,
         database: str,
+        output: str,
         verbose: bool,
 ):
     db = NasdaqDatabase(
@@ -60,10 +66,15 @@ def walk(
         verbose=verbose,
     )
 
+    graph_builder = None
+    if output:
+        graph_builder = NasdaqGraphBuilder()
+
     walker = NasdaqWalker(
         db=db,
         max_depth=depth,
         share_market_value_gte=min_share_value,
+        interface=graph_builder,
     )
     for i in company:
         walker.add_company(i)
@@ -74,6 +85,11 @@ def walk(
 
     walker.run()
     print(walker.status_string())
+
+    if graph_builder:
+        graph = graph_builder.to_igraph()
+        print(f"graph {len(graph.vs)}x{len(graph.es)}")
+        graph.write(output)
 
 
 if __name__ == "__main__":
