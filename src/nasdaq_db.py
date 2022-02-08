@@ -3,7 +3,7 @@ import time
 import json
 import datetime
 from pathlib import Path
-from typing import Union, Generator, Tuple, Optional, Type
+from typing import Union, Generator, Tuple, Optional, Type, Iterable, List
 
 from tqdm import tqdm
 from sqlalchemy import (
@@ -375,7 +375,7 @@ class NasdaqDatabase:
         if company_profile:
             yield from self._iter_objects(CompanyProfile, batch_size=batch_size)
         if stock_chart:
-            yield from self._iter_objects(StockChart, batch_size=batch_size)
+            yield from self._iter_objects(StockChart, batch_size=max(10, batch_size // 4))
         if company_holders:
             yield from self._iter_objects(CompanyHolders, batch_size=batch_size)
         if company_insiders:
@@ -411,3 +411,72 @@ class NasdaqDatabase:
                     "data": {fn: value for fn, value in zip(field_names, row)},
                 }
 
+    def import_objects(self, iterable: Iterable[dict], batch_size: int = 100) -> dict:
+        report = {}
+        object_bulk = []
+        if self.verbose:
+            iterable = tqdm(iterable, desc="importing")
+        last_time = time.time()
+        for obj in iterable:
+            if object_bulk:
+                if object_bulk[-1]["type"] != obj["type"] or len(object_bulk) >= batch_size:
+                    self._import_bulk(object_bulk, report)
+                    object_bulk.clear()
+
+                    if self.verbose:
+                        cur_time = time.time()
+                        if cur_time - last_time > 10:
+                            last_time = cur_time
+                            print()
+                            for key, value in report.items():
+                                print(f"{key:30}: {value:,}")
+
+            object_bulk.append(obj)
+
+        if object_bulk:
+            self._import_bulk(object_bulk, report)
+
+        if self.verbose:
+            print("\n")
+            for key, value in report.items():
+                print(f"{key:30}: {value:,}")
+
+        return report
+
+    def _import_bulk(self, objects: List[dict], report: dict):
+        # TODO: below is super ugly
+        #   but i really don't understand sqlalchemy enough
+        table = NasdaqDBBase.metadata.tables[objects[0]["type"]]
+        field_names = [c.name for c in table.columns]
+        id_field = field_names[0]
+
+        Base = declarative_base()
+        Model = type(table.name, (Base,), {"__table__": table})
+
+        obj_ids = [o["data"][id_field] for o in objects]
+        existing_ids = set(
+            v[0] for v in
+            self.db_session.query(getattr(Model, id_field))
+            .filter(getattr(Model, id_field).in_(obj_ids))
+            .all()
+        )
+
+        report[f"{table.name}"] = report.get(f"{table.name}", 0) + len(objects)
+        report[f"{table.name} added"] = report.get(f"{table.name} added", 0) + len(objects) - len(existing_ids)
+
+        models = []
+        for obj in objects:
+            if obj["data"][id_field] not in existing_ids:
+                obj = obj["data"]
+                if "timestamp" in obj:
+                    obj["timestamp"] = datetime.datetime.strptime(obj["timestamp"][:19], "%Y-%m-%dT%H:%M:%S")
+                if "date_from" in obj:
+                    obj["date_from"] = datetime.datetime.strptime(obj["date_from"], "%Y-%m-%d").date()
+                if "date_to" in obj:
+                    obj["date_to"] = datetime.datetime.strptime(obj["date_to"], "%Y-%m-%d").date()
+                models.append(Model(**obj))
+                existing_ids.add(obj[id_field])
+
+        if models:
+            self.db_session.bulk_save_objects(models)
+            self.db_session.commit()

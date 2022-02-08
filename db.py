@@ -1,12 +1,15 @@
 import json
 import argparse
 import datetime
+import gzip
+import codecs
 from pathlib import Path
 from typing import Optional, List
 
 from tqdm import tqdm
 
 from src.nasdaq_db import NasdaqDatabase, NasdaqDBBase
+from src.util import iter_ndjson
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -18,7 +21,7 @@ def parse_args() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command", type=str,
-        choices=["show", "export"],
+        choices=["show", "export", "import"],
         help=f"Commands",
     )
     parser.add_argument(
@@ -30,8 +33,12 @@ def parse_args() -> dict:
         help=f"Filename for the nd-json export, defaults to 'export.ndjson'",
     )
     parser.add_argument(
+        "-i", "--input", type=str, nargs="?", default="export.ndjson",
+        help=f"nd-json filename to import, defaults to 'export.ndjson'",
+    )
+    parser.add_argument(
         "-v", "--verbose", type=bool, nargs="?", default=False, const=True,
-        help=f"Log all web-requests and such",
+        help=f"Log export progress",
     )
     return vars(parser.parse_args())
 
@@ -40,6 +47,7 @@ def main(
         command: str,
         database: str,
         output: str,
+        input: str,
         verbose: bool,
 ):
     db = NasdaqDatabase(
@@ -53,18 +61,30 @@ def main(
             print(f"{name:25}: {query.count()}")
 
     elif command == "export":
-        export(db, output)
+        export_ndjson(db, output)
+
+    elif command == "import":
+        import_ndjson(db, input)
 
 
-def export(db: NasdaqDatabase, filename: str):
-    num_objects = 0
-    for name, table in NasdaqDBBase.metadata.tables.items():
-        num_objects += db.db_session.query(table).count()
+def export_ndjson(db: NasdaqDatabase, filename: str):
+    iterable = db.iter_objects()
+
+    if db.verbose:
+        num_objects = 0
+        for name, table in NasdaqDBBase.metadata.tables.items():
+            num_objects += db.db_session.query(table).count()
+
+        iterable = tqdm(iterable, total=num_objects, desc="exporting")
 
     with open(filename, "wt") as fp:
-        for obj in tqdm(db.iter_objects(), total=num_objects, desc="exporting"):
+        for obj in iterable:
             fp.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
             fp.write("\n")
+
+
+def import_ndjson(db: NasdaqDatabase, filename: str):
+    report = db.import_objects(iter_ndjson(filename))
 
 
 class JsonEncoder(json.JSONEncoder):
