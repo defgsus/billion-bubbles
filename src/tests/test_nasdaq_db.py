@@ -135,31 +135,38 @@ class TestNasdaqDatabase(unittest.TestCase):
             if db_filename.exists():
                 os.remove(db_filename)
 
-    def test_duplicate_pk(self):
+    def test_duplicate_storage(self):
         """
-        Just make sure that the "UNIQUE constrained failed" assertion
+        Make sure that the "UNIQUE constrained failed" assertion
         can be catched correctly when running multiple scrapers on
         the same database.
         """
-        from src.nasdaq_db import CompanyProfile
-        import datetime
         db_filename = Path(tempfile.gettempdir()) / f"billion-bubbles-{secrets.token_hex(10)}.sqlite3"
         try:
             nasdaq = NasdaqDatabase(db_filename)
-            nasdaq.db_session.add(
-                CompanyProfile(symbol="X", timestamp=datetime.datetime.utcnow(), data={})
-            )
-            nasdaq.db_session.commit()
+            nasdaq.api = FakeApi()
 
-            with self.assertRaises(IntegrityError) as ctx:
-                nasdaq.db_session.add(
-                    CompanyProfile(symbol="X", timestamp=datetime.datetime.utcnow(), data={})
-                )
-                nasdaq.db_session.commit()
+            profile = nasdaq.company_profile("BOLD")
+            self.assertEqual({"symbol": "BOLD"}, profile)
+            self.assertEqual(1, nasdaq.api.num_calls)
 
-            self.assertTrue(
-                "unique constraint failed" in str(ctx.exception).lower(),
-                str(ctx.exception)
+            profile = nasdaq.company_profile("OTHER")
+            self.assertEqual({"symbol": "OTHER"}, profile)
+            # this one tries to store BOLD the second time
+            #   and silently ignores the error
+            profile = nasdaq.company_profile("BOLD", _unittest_override_db_check=True)
+            self.assertEqual({"symbol": "BOLD"}, profile)
+            profile = nasdaq.company_profile("BETTER")
+            self.assertEqual({"symbol": "BETTER"}, profile)
+            self.assertEqual(4, nasdaq.api.num_calls)
+
+            db_symbols = set()
+            for obj in nasdaq.iter_objects(batch_size=30):
+                db_symbols.add(obj["data"]["symbol"])
+
+            self.assertEqual(
+                {"BOLD", "OTHER", "BETTER"},
+                db_symbols,
             )
 
         finally:

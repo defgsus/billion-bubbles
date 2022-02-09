@@ -86,16 +86,17 @@ class NasdaqDatabase:
         self.db_session: Session = sessionmaker(bind=self.db_engine)()
         NasdaqDBBase.metadata.create_all(self.db_engine)
 
-    def company_profile(self, symbol: str) -> dict:
+    def company_profile(self, symbol: str, _unittest_override_db_check: bool = False) -> dict:
         symbol = symbol.upper()
 
-        profile = (
-            self.db_session
-            .query(CompanyProfile)
-            .filter(CompanyProfile.symbol == symbol)
-        ).first()
-        if profile:
-            return profile.data
+        if not _unittest_override_db_check:
+            profile = (
+                self.db_session
+                .query(CompanyProfile)
+                .filter(CompanyProfile.symbol == symbol)
+            ).first()
+            if profile:
+                return profile.data
 
         timestamp = datetime.datetime.utcnow()
         data = self.api.company_profile(symbol)
@@ -109,6 +110,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return data
 
@@ -156,6 +158,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return data
 
@@ -210,6 +213,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return self._fix_date(data, "data.holdingsTransactions.table.rows", "date", False)
 
@@ -269,6 +273,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return data
 
@@ -319,6 +324,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return self._fix_date(data, "data.transactionTable.table.rows", "lastDate", False)
 
@@ -371,6 +377,7 @@ class NasdaqDatabase:
             # catch this in case multiple scraper run on the same database
             if "unique constraint failed" not in str(e).lower():
                 raise
+            self.db_session.rollback()
 
         return self._fix_date(data, "data.filterTransactionTable.rows", "lastDate", False)
 
