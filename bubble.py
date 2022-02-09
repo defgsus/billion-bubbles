@@ -55,6 +55,10 @@ def parse_args() -> dict:
         help=f"If provided, the resulting graph is written to this file",
     )
     parser.add_argument(
+        "--all-db", type=bool, nargs="?", default=False, const="True",
+        help=f"Build a graph from the whole database. Skips any tree traversal.",
+    )
+    parser.add_argument(
         "-v", "--verbose", type=bool, nargs="?", default=False, const=True,
         help=f"Log all web-requests and such",
     )
@@ -72,6 +76,7 @@ def walk(
         sort_order: str,
         database: str,
         output: str,
+        all_db: bool,
         verbose: bool,
 ):
     db = NasdaqDatabase(
@@ -83,35 +88,47 @@ def walk(
     if output:
         graph_builder = NasdaqGraphBuilder()
 
-    walker = NasdaqWalker(
-        db=db,
-        max_depth_holder=depth if depth_holder is None else depth_holder,
-        max_depth_insider=depth if depth_insider is None else depth_insider,
-        share_market_value_gte=min_share_value,
-        sort_order=sort_order,
-        interface=graph_builder,
-    )
+    if not all_db:
+        walker = NasdaqWalker(
+            db=db,
+            max_depth_holder=depth if depth_holder is None else depth_holder,
+            max_depth_insider=depth if depth_insider is None else depth_insider,
+            share_market_value_gte=min_share_value,
+            sort_order=sort_order,
+            interface=graph_builder,
+        )
 
-    def _get_id_list(ids: List[str]) -> List[str]:
-        all_ids = set()
-        for id in ids:
-            if "." not in id:
-                all_ids.add(id)
-            else:
-                for file_id in Path(id).read_text().splitlines():
-                    if file_id.strip():
-                        all_ids.add(file_id.strip())
-        return sorted(all_ids)
+        def _get_id_list(ids: List[str]) -> List[str]:
+            all_ids = set()
+            for id in ids:
+                if "." not in id:
+                    all_ids.add(id)
+                else:
+                    for file_id in Path(id).read_text().splitlines():
+                        if file_id.strip():
+                            all_ids.add(file_id.strip())
+            return sorted(all_ids)
 
-    for i in _get_id_list(company):
-        walker.add_company(i)
-    for i in _get_id_list(institution):
-        walker.add_institution(i)
-    for i in _get_id_list(insider):
-        walker.add_insider(i)
+        for i in _get_id_list(company):
+            walker.add_company(i)
+        for i in _get_id_list(institution):
+            walker.add_institution(i)
+        for i in _get_id_list(insider):
+            walker.add_insider(i)
 
-    walker.run()
-    print(walker.status_string())
+        walker.run()
+        print(walker.status_string())
+
+    else:
+        if not graph_builder:
+            print("--all-db must be specified together with --output")
+            exit(1)
+
+        iterable = db.iter_objects(
+            stock_chart=False,
+        )
+        graph_builder.from_objects(iterable)
+        graph_builder.finalize()
 
     if graph_builder:
         graph = graph_builder.to_igraph()

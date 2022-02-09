@@ -63,8 +63,8 @@ class NasdaqApi:
                 kwargs["timeout"] += 5
                 time.sleep(i)
 
-    def search(self, query: str):
-        url = f"https://api.nasdaq.com/api/autocomplete/slookup/10"
+    def search(self, query: str, limit: int = 10):
+        url = f"https://api.nasdaq.com/api/autocomplete/slookup/{limit}"
         return self.request(url, params={"search": query})
 
     def company_profile(self, symbol: str) -> dict:

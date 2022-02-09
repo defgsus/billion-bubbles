@@ -42,7 +42,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
     RELATION_MAP = {
         "Director": "director",
         "Officer": "officer",
-        "Beneficial Owner (10%)": "ten_percent",
+        "Beneficial Owner (10%)": "tenpercent",
     }
 
     def __init__(self):
@@ -164,7 +164,7 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
             self.vertex(symbol).update({
                 "sale_price": sale_price
             })
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, KeyError):
             pass
 
     def on_institution_positions(self, id: int, data: Optional[dict]):
@@ -174,10 +174,11 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
         if not data:
             return
 
-        self.vertex(id).update({
-            "label": data["title"][18:],
-            "type": "insider",
-        })
+        vertex = self.vertex(id)
+        vertex["type"] = "insider"
+        if data.get("title"):
+            vertex["label"] = data["title"][18:]
+
         rows = get_path(data, "filerTransactionTable.rows")
         if rows:
 

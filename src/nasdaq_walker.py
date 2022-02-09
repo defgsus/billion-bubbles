@@ -1,7 +1,9 @@
 import json
 import time
 import hashlib
-from typing import Optional, Union
+from typing import Optional, Union, Iterable
+
+from tqdm import tqdm
 
 from .nasdaq_db import NasdaqDatabase
 from .util import get_path, to_int
@@ -38,6 +40,27 @@ class NasdaqWalkerInterface:
         All objects are sent at this time.
         """
         pass
+
+    def from_objects(self, iterable: Iterable[dict]):
+        """
+        Helper function to pass the NasdaqDatabase.iter_objects() generator
+        and build a graph from that.
+        """
+        for obj in iterable:
+            if obj["type"] == "company_profile":
+                self.on_company_profile(obj["data"]["symbol"], obj["data"]["data"])
+            elif obj["type"] == "company_holders":
+                self.on_company_holders(obj["data"]["symbol"], obj["data"]["data"])
+            elif obj["type"] == "company_insiders":
+                self.on_company_insiders(obj["data"]["symbol"], obj["data"]["data"])
+            elif obj["type"] == "stock_chart":
+                self.on_stock_chart(obj["data"]["symbol"], obj["data"]["data"])
+            elif obj["type"] == "institutional_positions":
+                self.on_institution_positions(obj["data"]["id"], obj["data"]["data"])
+            elif obj["type"] == "insider_positions":
+                self.on_insider_positions(obj["data"]["id"], obj["data"]["data"])
+            else:
+                raise ValueError(f"Unknown object type '{obj['type']}'")
 
 
 class NasdaqWalker:
@@ -149,7 +172,7 @@ class NasdaqWalker:
 
     def _next_unsorted(self, iterable) -> Union[int, str]:
         if self._sort_order:
-            return sorted(self._todo_company, key=self._unsorted_sort_key)[0]
+            return sorted(iterable, key=self._unsorted_sort_key)[0]
         else:
             return next(iter(iterable))
 

@@ -1,19 +1,43 @@
 import sys
 import json
+import argparse
+from typing import List
 
 import tabulate
 
 from src.nasdaq_api import NasdaqApi
 
 
-def search(query: str):
-    api = NasdaqApi(verbose=False)
-    result = api.search(query)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "query", type=str, nargs="+",
+        help="The search query",
+    )
+    parser.add_argument(
+        "-l", "--limit", type=int, default=10,
+        help="The maximum number of results (default 10)",
+    )
+    return vars(parser.parse_args())
 
-    print(tabulate.tabulate(result["data"], tablefmt="presto"))
+
+def search(
+        query: List[str],
+        limit: int,
+):
+    api = NasdaqApi(verbose=False)
+    result = api.search(
+        query=" ".join(query),
+        limit=limit,
+    )
+
+    print(tabulate.tabulate(
+        result["data"],
+        tablefmt="presto"),
+    )
 
     # print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
-    search(" ".join(sys.argv[1:]))
+    search(**parse_args())
