@@ -8,6 +8,8 @@ from typing import Union, Optional
 
 from src.nasdaq_db import NasdaqDatabase
 
+from sqlalchemy.exc import IntegrityError
+
 
 class FakeApi:
 
@@ -34,7 +36,7 @@ class FakeApi:
                         "totalRecords": "150",
                         "table": {
                             "rows": [
-                                {"index": i}
+                                {"index": i, "date": "01/30/2000"}
                                 for i in range(offset, min(offset + limit, 150))
                             ]
                         }
@@ -80,24 +82,24 @@ class TestNasdaqDatabase(unittest.TestCase):
             nasdaq.api = FakeApi()
 
             data = nasdaq.company_holders("BOLD", page_size=100)
-            self.assertEqual(
-                [{"index": i} for i in range(150)],
-                data["data"]["holdingsTransactions"]["table"]["rows"],
-            )
+            # note that the date is flipped!
+            expected_rows = [{"index": i, "date": "2000/01/30"} for i in range(150)]
+            if data["data"]["holdingsTransactions"]["table"]["rows"] != expected_rows:
+                raise AssertionError(f"Expected:\n{expected_rows}\nGot:\n{data}")
+
             # needs two requests because page_size is too small
             self.assertEqual(2, nasdaq.api.num_calls)
 
-            # repeat the whole thing
+            # repeat the whole thing with a new DB connection
 
             nasdaq = NasdaqDatabase(db_filename, verbose=True)
             nasdaq.api = FakeApi()
 
             for i in range(2):
                 data = nasdaq.company_holders("BOLD", page_size=100)
-                self.assertEqual(
-                    [{"index": i} for i in range(150)],
-                    data["data"]["holdingsTransactions"]["table"]["rows"],
-                )
+                if data["data"]["holdingsTransactions"]["table"]["rows"] != expected_rows:
+                    raise AssertionError(f"Expected:\n{expected_rows}\nGot:\n{data}")
+
                 # no requests thistime
                 self.assertEqual(0, nasdaq.api.num_calls)
 
@@ -128,6 +130,37 @@ class TestNasdaqDatabase(unittest.TestCase):
                 all_symbols.remove(symbol)
 
             self.assertFalse(all_symbols)
+
+        finally:
+            if db_filename.exists():
+                os.remove(db_filename)
+
+    def test_duplicate_pk(self):
+        """
+        Just make sure that the "UNIQUE constrained failed" assertion
+        can be catched correctly when running multiple scrapers on
+        the same database.
+        """
+        from src.nasdaq_db import CompanyProfile
+        import datetime
+        db_filename = Path(tempfile.gettempdir()) / f"billion-bubbles-{secrets.token_hex(10)}.sqlite3"
+        try:
+            nasdaq = NasdaqDatabase(db_filename)
+            nasdaq.db_session.add(
+                CompanyProfile(symbol="X", timestamp=datetime.datetime.utcnow(), data={})
+            )
+            nasdaq.db_session.commit()
+
+            with self.assertRaises(IntegrityError) as ctx:
+                nasdaq.db_session.add(
+                    CompanyProfile(symbol="X", timestamp=datetime.datetime.utcnow(), data={})
+                )
+                nasdaq.db_session.commit()
+
+            self.assertTrue(
+                "unique constraint failed" in str(ctx.exception).lower(),
+                str(ctx.exception)
+            )
 
         finally:
             if db_filename.exists():

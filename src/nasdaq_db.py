@@ -12,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship, backref, sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.exc import IntegrityError
 
 from .nasdaq_api import NasdaqApi
 from .util import get_path
@@ -102,7 +103,12 @@ class NasdaqDatabase:
         self.db_session.add(
             CompanyProfile(symbol=symbol, timestamp=timestamp, data=data)
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return data
 
@@ -144,7 +150,12 @@ class NasdaqDatabase:
                 data=data,
             )
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return data
 
@@ -193,7 +204,12 @@ class NasdaqDatabase:
                 symbol=symbol, type=type, timestamp=timestamp, data=data,
             )
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return self._fix_date(data, "data.holdingsTransactions.table.rows", "date", False)
 
@@ -247,7 +263,12 @@ class NasdaqDatabase:
                 id=id, type=type, timestamp=timestamp, data=data,
             )
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return data
 
@@ -292,7 +313,12 @@ class NasdaqDatabase:
                 symbol=symbol, timestamp=timestamp, data=data,
             )
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return self._fix_date(data, "data.transactionTable.table.rows", "lastDate", False)
 
@@ -339,7 +365,12 @@ class NasdaqDatabase:
                 id=id, timestamp=timestamp, data=data,
             )
         )
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError as e:
+            # catch this in case multiple scraper run on the same database
+            if "unique constraint failed" not in str(e).lower():
+                raise
 
         return self._fix_date(data, "data.filterTransactionTable.rows", "lastDate", False)
 

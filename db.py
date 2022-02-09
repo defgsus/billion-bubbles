@@ -9,21 +9,21 @@ from typing import Optional, List
 
 from tqdm import tqdm
 
-from src.nasdaq_db import NasdaqDatabase, NasdaqDBBase
+from src.nasdaq_db import *
 from src.util import iter_ndjson
-
-
-PROJECT_DIR = Path(__file__).resolve().parent
-
-DEFAULT_DB_NAME = PROJECT_DIR / datetime.date.today().strftime("nasdaq-%Y-%m.sqlite3")
+from src.config import DEFAULT_DB_NAME
 
 
 def parse_args() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command", type=str,
-        choices=["show", "export", "import"],
-        help=f"Commands",
+        choices=["show", "export", "import", "search"],
+        help=f"Command",
+    )
+    parser.add_argument(
+        "query", type=str, nargs="?",
+        help=f"search term",
     )
     parser.add_argument(
         "-db", "--database", type=str, nargs="?", default=str(DEFAULT_DB_NAME),
@@ -49,6 +49,7 @@ def main(
         database: str,
         output: str,
         input: str,
+        query: str,
         verbose: bool,
 ):
     db = NasdaqDatabase(
@@ -66,6 +67,9 @@ def main(
 
     elif command == "import":
         import_ndjson(db, input)
+
+    elif command == "search":
+        search(db, query)
 
 
 def export_ndjson(db: NasdaqDatabase, filename: str):
@@ -100,6 +104,23 @@ class JsonEncoder(json.JSONEncoder):
         if isinstance(o, (datetime.date, datetime.datetime)):
             return o.isoformat()
         return super().default(o)
+
+
+def search(db: NasdaqDatabase, query: str):
+    for model in (
+            CompanyProfile, CompanyHolders, CompanyInsiders,
+            InstitutionPositions, InsiderPositions,
+    ):
+        field = model.__table__.c[0]
+        q = (
+            db.db_session.query(field)
+            .filter(model.data.contains(query))
+        )
+        result = q.limit(10).all()
+        if result:
+            print(f"\n{model.__table__.name}:")
+            for row in result:
+                print(f"  {row[0]}")
 
 
 if __name__ == "__main__":

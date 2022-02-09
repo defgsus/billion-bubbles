@@ -37,6 +37,8 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
         "shares_dollar": 0.,
     }
 
+    MIN_WEIGHT = 0.000001
+
     RELATION_MAP = {
         "Director": "director",
         "Officer": "officer",
@@ -263,7 +265,9 @@ class NasdaqGraphBuilder(NasdaqWalkerInterface):
 
             max_weight = max(*graph.es["weight"])
             if max_weight:
-                graph.es["weight"] = [max(0.00001, round(w / max_weight, 4)) for w in graph.es["weight"]]
+                graph.es["weight"] = [max(self.MIN_WEIGHT, round(w / max_weight, 4)) for w in graph.es["weight"]]
+            else:
+                graph.es["weight"] = [self.MIN_WEIGHT] * len(graph.es)
 
         return graph
 

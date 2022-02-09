@@ -1,9 +1,6 @@
 *.sqlite*
-*.gml
-*.dot
-*.txt
-*.json*
-*.ndjson*
+/stuff/
+/scratchpad/
 
 env/
 venv/

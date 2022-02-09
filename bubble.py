@@ -1,32 +1,30 @@
 import json
 import argparse
-import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from src.nasdaq_db import NasdaqDatabase
 from src.nasdaq_walker import NasdaqWalker
 from src.nasdaq_graph import NasdaqGraphBuilder
-
-
-PROJECT_DIR = Path(__file__).resolve().parent
-
-DEFAULT_DB_NAME = PROJECT_DIR / datetime.date.today().strftime("nasdaq-%Y-%m.sqlite3")
+from src.config import DEFAULT_DB_NAME
 
 
 def parse_args() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-c", "--company", type=str, nargs="*", default=[],
-        help="Company trading symbols to start with",
+        help="Company trading symbols to start with."
+             " If one contains a dot (.) it's treated as new-line separated text file",
     )
     parser.add_argument(
-        "-i", "--institution", type=int, nargs="*", default=[],
-        help="Institution IDs to start with",
+        "-i", "--institution", type=str, nargs="*", default=[],
+        help="Institution IDs to start with."
+             " If one contains a dot (.) it's treated as new-line separated text file",
     )
     parser.add_argument(
-        "-in", "--insider", type=int, nargs="*", default=[],
-        help="Insider IDs to start with",
+        "-in", "--insider", type=str, nargs="*", default=[],
+        help="Insider IDs to start with."
+             " If one contains a dot (.) it's treated as new-line separated text file",
     )
     parser.add_argument(
         "-db", "--database", type=str, nargs="?", default=str(DEFAULT_DB_NAME),
@@ -49,8 +47,8 @@ def parse_args() -> dict:
         help=f"Minimum holder/position share value in dollars to follow",
     )
     parser.add_argument(
-        "-so", "--sort-order", type=str, nargs="?", default="",
-        help=f"Any string (default "") changes the 'random' sort order of symbol/ID traversal",
+        "-so", "--sort-order", type=str, nargs="?", default=None,
+        help=f"Any string fixes the order of symbol/ID traversal to a specific 'random' sequence",
     )
     parser.add_argument(
         "-o", "--output", type=str, nargs="?", default=None,
@@ -65,8 +63,8 @@ def parse_args() -> dict:
 
 def walk(
         company: List[str],
-        institution: List[int],
-        insider: List[int],
+        institution: List[str],
+        insider: List[str],
         depth: int,
         depth_holder: Optional[int],
         depth_insider: Optional[int],
@@ -93,11 +91,23 @@ def walk(
         sort_order=sort_order,
         interface=graph_builder,
     )
-    for i in company:
+
+    def _get_id_list(ids: List[str]) -> List[str]:
+        all_ids = set()
+        for id in ids:
+            if "." not in id:
+                all_ids.add(id)
+            else:
+                for file_id in Path(id).read_text().splitlines():
+                    if file_id.strip():
+                        all_ids.add(file_id.strip())
+        return sorted(all_ids)
+
+    for i in _get_id_list(company):
         walker.add_company(i)
-    for i in institution:
+    for i in _get_id_list(institution):
         walker.add_institution(i)
-    for i in insider:
+    for i in _get_id_list(insider):
         walker.add_insider(i)
 
     walker.run()

@@ -55,7 +55,7 @@ class NasdaqWalker:
             max_depth_holder: int = 0,
             max_depth_insider: int = 0,
             share_market_value_gte: int = 0,
-            sort_order: str = "",
+            sort_order: Optional[str] = None,
     ):
         self.db = db
         self._interface = interface
@@ -147,11 +147,17 @@ class NasdaqWalker:
     def _unsorted_sort_key(self, x: Union[int, str]) -> str:
         return hashlib.sha256(f"{x}{self._sort_order}".encode()).hexdigest()
 
+    def _next_unsorted(self, iterable) -> Union[int, str]:
+        if self._sort_order:
+            return sorted(self._todo_company, key=self._unsorted_sort_key)[0]
+        else:
+            return next(iter(iterable))
+
     def _follow_company(self):
         if not self._todo_company:
             return
 
-        symbol = sorted(self._todo_company, key=self._unsorted_sort_key)[0]
+        symbol = self._next_unsorted(self._todo_company)
         depth = self._todo_company[symbol]
         del self._todo_company[symbol]
         self._num_companies += 1
@@ -169,35 +175,35 @@ class NasdaqWalker:
             if self._interface:
                 self._interface.on_stock_chart(symbol, chart)
 
-        if self._do_follow_holders:
-            self._follow_company_holders(symbol, depth)
+        if self._do_follow_holders and depth < self._max_depth_holder:
+            self._follow_company_holders(symbol, depth + 1)
 
-        if self._do_follow_insiders:
-            self._follow_company_insiders(symbol, depth)
+        if self._do_follow_insiders and depth < self._max_depth_insider:
+            self._follow_company_insiders(symbol, depth + 1)
 
     def _follow_institution(self):
         if not self._todo_institution:
             return
 
-        id = sorted(self._todo_institution, key=self._unsorted_sort_key)[0]
+        id = self._next_unsorted(self._todo_institution)
         depth = self._todo_institution[id]
         del self._todo_institution[id]
         self._num_institutions += 1
 
-        if self._do_follow_holders:
-            self._follow_institution_positions(id, depth)
+        if self._do_follow_holders and depth < self._max_depth_holder:
+            self._follow_institution_positions(id, depth + 1)
 
     def _follow_insider(self):
         if not self._todo_insiders:
             return
 
-        id = sorted(self._todo_insiders, key=self._unsorted_sort_key)[0]
+        id = self._next_unsorted(self._todo_insiders)
         depth = self._todo_insiders[id]
         del self._todo_insiders[id]
         self._num_insiders += 1
 
-        if self._do_follow_insiders:
-            self._follow_insider_positions(id, depth)
+        if self._do_follow_insiders and depth < self._max_depth_insider:
+            self._follow_insider_positions(id, depth + 1)
 
     def _follow_company_holders(self, symbol: str, depth: int):
         holders = self.db.company_holders(symbol)["data"]

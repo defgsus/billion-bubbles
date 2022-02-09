@@ -4,10 +4,7 @@ import argparse
 from pathlib import Path
 from src.nasdaq_db import NasdaqDatabase
 from src.nasdaq_api import NasdaqApi
-
-PROJECT_DIR = Path(__file__).resolve().parent
-
-DEFAULT_DB_NAME = PROJECT_DIR / datetime.date.today().strftime("nasdaq-%Y-%m.sqlite3")
+from src.config import DEFAULT_DB_NAME, PROJECT_DIR
 
 
 def main():

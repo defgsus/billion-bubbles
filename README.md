@@ -14,7 +14,7 @@ picked as the means of representation of companies
 and shareholders.
 
 
-### development
+### usage
 
 Run the typical *python env and pip requirements* stuff then
 
@@ -72,3 +72,9 @@ python db.py import -i export.ndjson.gz -v
 
 Omit the `.gz` extension to store uncompressed ndjson files.
  
+
+### interesting other sources
+
+- sec.gov *EDGAR*
+- nndb.com
+- https://www.cbetta.com/

@@ -102,6 +102,7 @@ def add_typical_measures(graph: igraph.Graph, prefix: str):
 
 def dump_graph(graph: igraph.Graph):
     report = dict()
+    report_str = dict()
 
     def _attributes(attrs, name: str):
         if len(attrs):
@@ -112,12 +113,22 @@ def dump_graph(graph: igraph.Graph):
                     mean = round(sum(attrs[key]) / len(attrs), 4)
                     report[f"{name}.{key}"] = (min_, max_, mean)
 
+                elif isinstance(attrs[key][0], str):
+                    counter = dict()
+                    for a in attrs[key]:
+                        counter[a] = counter.get(a, 0) + 1
+                    report_str[f"{name}.{key}"] = ", ".join(
+                        f"{a}: {counter[a]}"
+                        for a in sorted(counter, key=lambda key: -counter[key])[:5]
+                    )
+
     _attributes(graph.vs, "vertex")
     _attributes(graph.es, "edge")
 
     for key, (min_, max_, mean)  in report.items():
         print(f"{key:40}: {min_:24,.6f} {max_:24,.6f} {mean:24,.6f}")
-
+    for key, value in report_str.items():
+        print(f"{key:40}: {value}")
 
 
 if __name__ == "__main__":
