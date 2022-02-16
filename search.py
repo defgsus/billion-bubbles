@@ -30,6 +30,11 @@ def search(
         query=" ".join(query),
         limit=limit,
     )
+    for i, row in enumerate(result["data"]):
+        result["data"][i] = {
+            "index": i,
+            **row,
+        }
 
     print(tabulate.tabulate(
         result["data"],

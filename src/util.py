@@ -1,8 +1,9 @@
 import json
 import io
 import gzip
+import datetime
 from pathlib import Path
-from typing import Optional, Union, Generator, IO
+from typing import Optional, Union, Generator, IO, Iterable
 
 
 def to_id(name: str) -> str:
@@ -86,3 +87,28 @@ def iter_lines(file: Union[str, Path, IO], skip: int = 0, keep_first: bool = Fal
                 continue
 
             yield line
+
+
+def write_ndjson(file: Union[str, Path, IO], iterable: Iterable[Union[list, dict]]):
+    if isinstance(file, (str, Path)):
+        filename = str(file)
+
+        if filename.lower().endswith(".gz"):
+            with io.TextIOWrapper(io.BufferedWriter(gzip.open(filename, "wb"))) as fp:
+                write_ndjson(fp, iterable)
+
+        else:
+            with open(file, "wt") as fp:
+                write_ndjson(fp, iterable)
+
+    else:
+        for obj in iterable:
+            file.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
+            file.write("\n")
+
+
+class JsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, (datetime.date, datetime.datetime)):
+            return o.isoformat()
+        return super().default(o)

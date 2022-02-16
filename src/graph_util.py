@@ -3,6 +3,33 @@ from typing import Optional, Dict, List, Set
 import igraph
 
 
+def add_typical_measures(graph: igraph.Graph, prefix: str):
+    graph.vs[f"{prefix}page_rank"] = graph.pagerank()
+    graph.vs[f"{prefix}hub"] = graph.hub_score()
+    graph.vs[f"{prefix}authority"] = graph.authority_score()
+    graph.vs[f"{prefix}hub_authority"] = [max(a, b) for a, b in zip(
+        graph.vs[f"{prefix}hub"],
+        graph.vs[f"{prefix}authority"],
+    )]
+    graph.vs[f"{prefix}dollar_hub"] = graph.hub_score(weights="shares_dollar")
+    graph.vs[f"{prefix}dollar_authority"] = graph.authority_score(weights="shares_dollar")
+    graph.vs[f"{prefix}dollar_hub_authority"] = [max(a, b) for a, b in zip(
+        graph.vs[f"{prefix}dollar_hub"],
+        graph.vs[f"{prefix}dollar_authority"],
+    )]
+    graph.vs[f"{prefix}degree"] = graph.degree()
+    graph.vs[f"{prefix}degree_in"] = graph.indegree()
+    graph.vs[f"{prefix}degree_out"] = graph.outdegree()
+
+    graph.vs[f"{prefix}weighted_degree"] = graph.strength(mode="all", weights="weight")
+    graph.vs[f"{prefix}weighted_degree_in"] = graph.strength(mode="in", weights="weight")
+    graph.vs[f"{prefix}weighted_degree_out"] = graph.strength(mode="out", weights="weight")
+
+    graph.vs[f"{prefix}dollar_degree"] = graph.strength(mode="all", weights="shares_dollar")
+    graph.vs[f"{prefix}dollar_degree_in"] = graph.strength(mode="in", weights="shares_dollar")
+    graph.vs[f"{prefix}dollar_degree_out"] = graph.strength(mode="out", weights="shares_dollar")
+
+
 def filter_graph(
         graph: igraph.Graph,
         edge_filters: Optional[dict] = None,

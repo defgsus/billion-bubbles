@@ -1,6 +1,7 @@
 *.sqlite*
 /stuff/
 /scratchpad/
+/notebooks/
 
 env/
 venv/

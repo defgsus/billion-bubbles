@@ -2,11 +2,13 @@ import json
 import argparse
 import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Dict, Callable, Set
+
+from tqdm import tqdm
 
 import igraph
 
-from src.graph_util import filter_graph
+from src.graph_util import filter_graph, add_typical_measures
 
 
 def parse_args() -> dict:
@@ -27,7 +29,29 @@ def parse_args() -> dict:
         "-vf", "--vertex-filter", type=str, nargs="*", default=[],
         help=f"Filter for vertices, e.g. 'degree_in__gt=3'",
     )
+    parser.add_argument(
+        "-i", "--include", type=str, nargs="*", default=[],
+        help=f"Vertex IDs to include. Connected nodes will be kept as well."
+             " If one contains a dot (.) it's treated as new-line separated text file",
+    )
+    parser.add_argument(
+        "-x", "--exclude", type=str, nargs="*", default=[],
+        help=f"Vertex IDs to exclude."
+             " If one contains a dot (.) it's treated as new-line separated text file",
+    )
     return vars(parser.parse_args())
+
+
+def _get_id_set(ids: List[str]) -> Set[str]:
+    all_ids = set()
+    for id in ids:
+        if "." not in id:
+            all_ids.add(id)
+        else:
+            for file_id in Path(id).read_text().splitlines():
+                if file_id.strip():
+                    all_ids.add(file_id.strip())
+    return all_ids
 
 
 def main(
@@ -35,22 +59,66 @@ def main(
         output: Optional[str],
         vertex_filter: List[str],
         edge_filter: List[str],
+        include: List[str],
+        exclude: List[str],
 ):
     graph: igraph.Graph = igraph.read(input)
 
     num_nodes, num_edges = len(graph.vs), len(graph.es)
     print(f"graph size: {num_nodes:,} x {num_edges:,}")
 
-    add_typical_measures(graph, "full_")
+    add_typical_measures(graph, "")
+    calc_final_measures = False
+
+    if include:
+        include_ids = _get_id_set(include)
+        id_map = {
+            i: id
+            for i, id in enumerate(graph.vs["name"])
+        }
+        connect_map = {}
+        for from_, to_ in tqdm(graph.get_edgelist(), "build connection map"):
+            from_, to_ = id_map[from_], id_map[to_]
+            connect_map.setdefault(from_, []).append(to_)
+            connect_map.setdefault(to_, []).append(from_)
+
+        ids_to_delete = []
+        for i, id in tqdm(enumerate(graph.vs["name"]), desc="filtering"):
+            include_id = id in include_ids
+            if not include_id:
+                for con_id in connect_map.get(id, []):
+                    if con_id in include_ids:
+                        include_id = True
+                        break
+            if not include_id:
+                ids_to_delete.append(id)
+
+        if ids_to_delete:
+            graph.delete_vertices(ids_to_delete)
+            calc_final_measures = True
+
+    if exclude:
+        exclude_ids = _get_id_set(exclude)
+
+        ids_to_delete = [
+            i for i, id in enumerate(graph.vs["name"])
+            if str(id) in exclude_ids
+        ]
+        if ids_to_delete:
+            graph.delete_vertices(ids_to_delete)
+            calc_final_measures = True
 
     if vertex_filter or edge_filter:
         apply_filters(graph, vertex_filter, edge_filter)
+        calc_final_measures = True
+
+    if calc_final_measures:
         f_num_nodes, f_num_edges = len(graph.vs), len(graph.es)
         print(f"filtered graph size: {f_num_nodes:,} x {f_num_edges:,}")
-
         add_typical_measures(graph, "final_")
 
     dump_graph(graph)
+    print(f"graph size: {len(graph.vs):,} x {len(graph.es):,}")
 
     if output:
         graph.write(output)
@@ -79,25 +147,6 @@ def apply_filters(graph, vertex_filter: List[str], edge_filter: [str]):
         vertex_filters=vertex_filter,
         edge_filters=edge_filter,
     )
-
-
-def add_typical_measures(graph: igraph.Graph, prefix: str):
-    graph.vs[f"{prefix}page_rank"] = graph.pagerank()
-    graph.vs[f"{prefix}hub"] = graph.hub_score()
-    graph.vs[f"{prefix}authority"] = graph.authority_score()
-    graph.vs[f"{prefix}dollar_hub"] = graph.hub_score(weights="shares_dollar")
-    graph.vs[f"{prefix}dollar_authority"] = graph.authority_score(weights="shares_dollar")
-    graph.vs[f"{prefix}degree"] = graph.degree()
-    graph.vs[f"{prefix}degree_in"] = graph.indegree()
-    graph.vs[f"{prefix}degree_out"] = graph.outdegree()
-
-    graph.vs[f"{prefix}weighted_degree"] = graph.strength(mode="all", weights="weight")
-    graph.vs[f"{prefix}weighted_degree_in"] = graph.strength(mode="in", weights="weight")
-    graph.vs[f"{prefix}weighted_degree_out"] = graph.strength(mode="out", weights="weight")
-
-    graph.vs[f"{prefix}dollar_degree"] = graph.strength(mode="all", weights="shares_dollar")
-    graph.vs[f"{prefix}dollar_degree_in"] = graph.strength(mode="in", weights="shares_dollar")
-    graph.vs[f"{prefix}dollar_degree_out"] = graph.strength(mode="out", weights="shares_dollar")
 
 
 def dump_graph(graph: igraph.Graph):

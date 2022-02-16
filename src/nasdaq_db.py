@@ -445,7 +445,7 @@ class NasdaqDatabase:
             iterable = tqdm(iterable, desc=model.__table__.name, unit_scale=batch_size)
 
         for i in iterable:
-            for row in query.slice(i, batch_size).all():
+            for row in query.slice(i, i+batch_size).all():
                 yield {
                     "type": model.__table__.name,
                     "data": {fn: value for fn, value in zip(field_names, row)},

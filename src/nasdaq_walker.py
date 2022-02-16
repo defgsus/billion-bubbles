@@ -48,17 +48,17 @@ class NasdaqWalkerInterface:
         """
         for obj in iterable:
             if obj["type"] == "company_profile":
-                self.on_company_profile(obj["data"]["symbol"], obj["data"]["data"])
+                self.on_company_profile(obj["data"]["symbol"], obj["data"]["data"]["data"])
             elif obj["type"] == "company_holders":
-                self.on_company_holders(obj["data"]["symbol"], obj["data"]["data"])
+                self.on_company_holders(obj["data"]["symbol"], obj["data"]["data"]["data"])
             elif obj["type"] == "company_insiders":
-                self.on_company_insiders(obj["data"]["symbol"], obj["data"]["data"])
+                self.on_company_insiders(obj["data"]["symbol"], obj["data"]["data"]["data"])
             elif obj["type"] == "stock_chart":
-                self.on_stock_chart(obj["data"]["symbol"], obj["data"]["data"])
+                self.on_stock_chart(obj["data"]["symbol"], obj["data"]["data"]["data"])
             elif obj["type"] == "institutional_positions":
-                self.on_institution_positions(obj["data"]["id"], obj["data"]["data"])
+                self.on_institution_positions(obj["data"]["id"], obj["data"]["data"]["data"])
             elif obj["type"] == "insider_positions":
-                self.on_insider_positions(obj["data"]["id"], obj["data"]["data"])
+                self.on_insider_positions(obj["data"]["id"], obj["data"]["data"]["data"])
             else:
                 raise ValueError(f"Unknown object type '{obj['type']}'")
 
