@@ -2,6 +2,7 @@
 /stuff/
 /scratchpad/
 /notebooks/
+/cache/
 
 env/
 venv/
