@@ -23,9 +23,10 @@ class NasdaqApi:
         self.verbose = verbose
         self.session = requests.Session()
         self.session.headers = {
-            "user-agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0",
+            # "user-agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0",
+            "user-agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:106.0) Gecko/20100101 Firefox/106.0",
             "referer":  "https://www.nasdaq.com/",
-            "origin":  "https://www.nasdaq.com/",
+            "origin":  "https://www.nasdaq.com",
             "host": "api.nasdaq.com",
             "connection": "keep-alive",
             "accept": "Accept: application/json, text/plain, */*",

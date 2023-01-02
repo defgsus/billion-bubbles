@@ -128,12 +128,12 @@ class NasdaqWalker:
         id = int(id)
         if id in self._seen:
             self._num_duplicate_insiders += 1
-
-        if id not in self._todo_insiders:
-            self._todo_insiders[id] = depth
         else:
-            self._todo_insiders[id] = min(self._todo_insiders[id], depth)
-        self._seen.add(id)
+            if id not in self._todo_insiders:
+                self._todo_insiders[id] = depth
+            else:
+                self._todo_insiders[id] = min(self._todo_insiders[id], depth)
+            self._seen.add(id)
 
     def run(self):
         while self._todo_company or self._todo_institution or self._todo_insiders:

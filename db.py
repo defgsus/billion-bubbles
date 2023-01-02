@@ -63,8 +63,8 @@ def main(
 
     if command == "show":
         for name, table in NasdaqDBBase.metadata.tables.items():
-            query = db.db_session.query(table)
-            print(f"{name:25}: {query.count()}")
+            db_query = db.db_session.query(table)
+            print(f"{name:25}: {db_query.count()}")
 
     if command == "search":
         search(db, query)

@@ -76,7 +76,8 @@ Omit the `.gz` extension to store uncompressed ndjson files.
 ### interesting other sources
 
 - sec.gov *EDGAR*
-- nndb.com
 - https://www.cbetta.com/
 - https://anitab.org/research-and-impact/top-companies/2021-results/
 - https://fortune.com/fortune500/
+- https://www.allsides.com/
+- https://www.bilderbergmeetings.org/background/steering-committee/steering-committee
