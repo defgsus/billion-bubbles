@@ -166,7 +166,7 @@ class NasdaqDatabase:
             self,
             symbol,
             type: str = "TOTAL",
-            page_size: int = 300,
+            page_size: int = 100,
     ) -> dict:
         symbol = symbol.upper()
 
@@ -221,7 +221,7 @@ class NasdaqDatabase:
             self,
             id: Union[int, str],
             type: str = "TOTAL",
-            page_size: int = 200,
+            page_size: int = 100,
     ) -> dict:
         id = int(id)
 

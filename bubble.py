@@ -47,8 +47,8 @@ def parse_args() -> dict:
         help=f"Minimum holder/position share value in dollars to follow",
     )
     parser.add_argument(
-        "-nsc", "--no-stock-chart", type=bool, nargs="?", default=False, const=True,
-        help=f"Disable downloading/usage of stock-charts",
+        "-sc", "--stock-charts", type=bool, nargs="?", default=False, const=True,
+        help=f"Enable downloading of stock-charts",
     )
     parser.add_argument(
         "-so", "--sort-order", type=str, nargs="?", default=None,
@@ -77,7 +77,7 @@ def walk(
         depth_holder: Optional[int],
         depth_insider: Optional[int],
         min_share_value: int,
-        no_stock_chart: bool,
+        stock_charts: bool,
         sort_order: str,
         database: str,
         output: str,
@@ -99,7 +99,7 @@ def walk(
             max_depth_holder=depth if depth_holder is None else depth_holder,
             max_depth_insider=depth if depth_insider is None else depth_insider,
             share_market_value_gte=min_share_value,
-            stock_charts=not no_stock_chart,
+            stock_charts=stock_charts,
             sort_order=sort_order,
             interface=graph_builder,
         )
