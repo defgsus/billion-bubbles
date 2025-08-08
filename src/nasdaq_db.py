@@ -406,28 +406,32 @@ class NasdaqDatabase:
             institution_positions: bool = True,
             insider_positions: bool = True,
             batch_size: int = 1000,
+            verbose: Optional[bool] = None,
     ) -> Generator[dict, None, None]:
         """
         Yield all objects from the database, each as dict
         """
         if company_profile:
-            yield from self._iter_objects(CompanyProfile, batch_size=batch_size)
+            yield from self._iter_objects(CompanyProfile, batch_size=batch_size, verbose=verbose)
         if stock_chart:
-            yield from self._iter_objects(StockChart, batch_size=max(10, batch_size // 4))
+            yield from self._iter_objects(StockChart, batch_size=max(10, batch_size // 4), verbose=verbose)
         if company_holders:
-            yield from self._iter_objects(CompanyHolders, batch_size=batch_size)
+            yield from self._iter_objects(CompanyHolders, batch_size=batch_size, verbose=verbose)
         if company_insiders:
-            yield from self._iter_objects(CompanyInsiders, batch_size=batch_size)
+            yield from self._iter_objects(CompanyInsiders, batch_size=batch_size, verbose=verbose)
         if institution_positions:
-            yield from self._iter_objects(InstitutionPositions, batch_size=batch_size)
+            yield from self._iter_objects(InstitutionPositions, batch_size=batch_size, verbose=verbose)
         if insider_positions:
-            yield from self._iter_objects(InsiderPositions, batch_size=batch_size)
+            yield from self._iter_objects(InsiderPositions, batch_size=batch_size, verbose=verbose)
 
     def _iter_objects(
             self,
             model: Type[NasdaqDBBase],
             batch_size: int = 1000,
+            verbose: Optional[bool] = None,
     ) -> Generator[dict, None, None]:
+        if verbose is None:
+            verbose = self.verbose
 
         field_names = [c.name for c in model.__table__.columns]
         order_field = field_names[0]
@@ -441,7 +445,7 @@ class NasdaqDatabase:
         count = query.count()
         iterable = range(0, count, batch_size)
 
-        if self.verbose:
+        if verbose:
             iterable = tqdm(iterable, desc=model.__table__.name, unit_scale=batch_size)
 
         for i in iterable:

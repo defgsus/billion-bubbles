@@ -207,26 +207,44 @@ def export_ndjson(db: NasdaqDatabase, filename: str):
         stock_chart=True,
         institution_positions=True,
         insider_positions=True,
+        verbose=False,
     )
 
     if db.verbose:
         num_objects = 0
         for name, table in NasdaqDBBase.metadata.tables.items():
-            num_objects += db.db_session.query(table).count()
+            count = db.db_session.query(table).count()
+            num_objects += count
+            print(f"table {name:30}: {count} items")
 
         iterable = tqdm(iterable, total=num_objects, desc="exporting")
 
+    def _filter(obj: dict):
+        return True
+        # some test...
+        if "symbol" in obj["data"]:
+            if obj["data"]["symbol"] in ["MSFT"]:
+                return True
+        return False
+
     def _export(fp, iterable):
+        count = 0
         for obj in iterable:
-            fp.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
-            fp.write("\n")
+            if _filter(obj):
+                count += 1
+                fp.write(json.dumps(obj, separators=(',', ':'), ensure_ascii=False, cls=JsonEncoder))
+                fp.write("\n")
+        return count
 
     if filename.lower().endswith(".gz"):
         with io.TextIOWrapper(io.BufferedWriter(gzip.open(filename, "wb"))) as fp:
-            _export(fp, iterable)
+            count = _export(fp, iterable)
     else:
         with open(filename, "wt") as fp:
-            _export(fp, iterable)
+            count = _export(fp, iterable)
+
+    if db.verbose:
+        print(f"Exported {count} objects")
 
 
 def import_ndjson(db: NasdaqDatabase, filename: str):
