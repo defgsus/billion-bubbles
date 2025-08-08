@@ -148,7 +148,7 @@ class NasdaqDatabase:
                 key=key, symbol=symbol, timestamp=timestamp,
                 asset_class=asset_class,
                 date_from=datetime.datetime.strptime(date_from, "%Y-%m-%d").date(),
-                date_to=datetime.datetime.strptime(date_from, "%Y-%m-%d").date(),
+                date_to=datetime.datetime.strptime(date_to, "%Y-%m-%d").date(),
                 data=data,
             )
         )

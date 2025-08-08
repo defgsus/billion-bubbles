@@ -107,33 +107,35 @@ class NasdaqWalker:
         if symbol in self._seen:
             self._num_duplicate_companies += 1
         else:
+            self._seen.add(symbol)
             if symbol not in self._todo_company:
                 self._todo_company[symbol] = depth
             else:
                 self._todo_company[symbol] = min(self._todo_company[symbol], depth)
-            self._seen.add(symbol)
 
     def add_institution(self, id: Union[int, str], depth: int = 0):
         id = int(id)
-        if id in self._seen:
+        seen_id = f"inst-{id}"
+        if seen_id in self._seen:
             self._num_duplicate_institutions += 1
         else:
+            self._seen.add(seen_id)
             if id not in self._todo_institution:
                 self._todo_institution[id] = depth
             else:
                 self._todo_institution[id] = min(self._todo_institution[id], depth)
-            self._seen.add(id)
 
     def add_insider(self, id: Union[int, str], depth: int = 0):
         id = int(id)
-        if id in self._seen:
+        seen_id = f"insi-{id}"
+        if seen_id in self._seen:
             self._num_duplicate_insiders += 1
         else:
+            self._seen.add(seen_id)
             if id not in self._todo_insiders:
                 self._todo_insiders[id] = depth
             else:
                 self._todo_insiders[id] = min(self._todo_insiders[id], depth)
-            self._seen.add(id)
 
     def run(self):
         while self._todo_company or self._todo_institution or self._todo_insiders:
@@ -240,7 +242,7 @@ class NasdaqWalker:
         if depth < self._max_depth_holder and get_path(holders, "holdingsTransactions.table.rows"):
             try:
                 value_title = get_path(holders, "holdingsTransactions.table.headers.marketValue")
-                assert value_title == "VALUE (IN 1,000S)", value_title
+                assert value_title.lower() == "value (in 1,000s)", value_title
 
                 for row in holders["holdingsTransactions"]["table"]["rows"]:
                     if not row["url"]:
@@ -287,7 +289,7 @@ class NasdaqWalker:
         if depth < self._max_depth_holder and get_path(holdings, "institutionPositions.table.rows"):
             try:
                 value_title = get_path(holdings, "institutionPositions.table.headers.value")
-                assert value_title == "Value ($1,000s)", value_title
+                assert value_title.lower() == "value ($1,000s)", value_title
 
                 for row in get_path(holdings, "institutionPositions.table.rows"):
                     if not row["url"]:
