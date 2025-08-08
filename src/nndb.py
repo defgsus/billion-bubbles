@@ -1,9 +1,11 @@
 import os
+import re
 import time
 import json
 from pathlib import Path
 import traceback
 import urllib.parse
+import datetime
 from typing import List, Optional
 
 from tqdm import tqdm
@@ -137,6 +139,7 @@ class NNDBScraper:
                         except:
                             print(f"\nERROR in scrape_{type}('{url}')")
                             traceback.print_exc()
+                            print()
                         handled = True
                     break
 
@@ -161,7 +164,7 @@ class NNDBScraper:
                 if len(list(table.children)) > 1000:
                     for row in table.find_all("tr"):
                         row = row.find_all("td")
-                        self._people_node_from_row(row)
+                        self._people_node_from_row(row, 0)
 
         if 0:
             for node in tqdm(self.nodes.values(), desc="scrape people from index"):
@@ -175,10 +178,10 @@ class NNDBScraper:
         })
         soup = self.soup(url)
 
-        table = soup.find_all("table")[-2]
+        table = soup.find_all("table")[4]
         bs = table.find_all("b")
         if not bs:
-            print("UNSCRAPED PEOPLE", url)
+            print("UNSCRAPABLE PEOPLE", url)
             return
 
         node.update({
@@ -250,7 +253,7 @@ class NNDBScraper:
                 if edge_type:
                     table = p.find("table")
                     for tr in table.find_all("tr"):
-                        people_node = self._people_node_from_row(tr.find_all("td"))
+                        people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
                         if people_node:
                             people_node["relations"].append({
                                 "to": company_id,
@@ -280,7 +283,7 @@ class NNDBScraper:
         people_table = table.find("table")
 
         for tr in people_table.find_all("tr"):
-            people_node = self._people_node_from_row(tr.find_all("td"))
+            people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
             if people_node:
                 people_node["relations"].append({
                     "to": gov_id,
@@ -331,7 +334,7 @@ class NNDBScraper:
                 if edge_type:
                     table = p.find("table")
                     for tr in table.find_all("tr"):
-                        people_node = self._people_node_from_row(tr.find_all("td"))
+                        people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
                         if people_node:
                             people_node["relations"].append({
                                 "to": edu_id,
@@ -339,12 +342,101 @@ class NNDBScraper:
                             })
 
     def scrape_group(self, url: str, distance: int = 0):
-        id = url.strip("/").split("/")[-1]
+        group_id = self.url_to_id(url)
+        node = self.get_node(group_id)
+        node.update({
+            "type": "group",
+            "url": url,
+        })
         soup = self.soup(url)
 
-    def scrape_detox(self, url: str, distance: int = 0):
-        id = url.strip("/").split("/")[-1]
+        heading = soup.find("font", {"size": "+3"})
+        if heading and heading.text and heading.text.strip():
+            node["name"] = heading.text.strip()
+
+        table = soup.find_all("table")[4]
+        relations = []
+        self._parse_p_tags(node, table, relations)
+
+        for a in table.find_all("a"):
+            if a.get("href"):
+                self.add_url_todo(a["href"], distance + 1)
+
+        people_table = soup.find("table", {"id": "sort_actors"})
+
+        for tr in people_table.find_all("tr"):
+            people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
+            if people_node:
+                people_node["relations"].append({
+                    "to": group_id,
+                    "type": "member",
+                })
+
+        #print(node)
+
+    def scrape_org(self, url: str, distance: int = 0):
+        org_id = self.url_to_id(url)
+        node = self.get_node(org_id)
+        node.update({
+            "type": "org",
+            "url": url,
+        })
         soup = self.soup(url)
+
+        heading = soup.find("font", {"size": "+3"})
+        if heading and heading.text and heading.text.strip():
+            node["name"] = heading.text.strip()
+
+        table = soup.find_all("table")[4]
+        relations = []
+        self._parse_p_tags(node, table, relations)
+
+        for a in table.find_all("a"):
+            if a.get("href"):
+                self.add_url_todo(a["href"], distance + 1)
+
+        people_table = soup.find("table", {"id": "sort_actors"})
+
+        for tr in people_table.find_all("tr"):
+            people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
+            if people_node:
+                people_node["relations"].append({
+                    "to": org_id,
+                    "type": "member",
+                })
+
+        # print(node)
+
+    def scrape_detox(self, url: str, distance: int = 0):
+        detox_id = self.url_to_id(url)
+        node = self.get_node(detox_id)
+        node.update({
+            "type": "detox",
+            "url": url,
+        })
+        soup = self.soup(url)
+
+        heading = soup.find("font", {"size": "+3"})
+        if heading and heading.text and heading.text.strip():
+            node["name"] = heading.text.strip()
+
+        table = soup.find_all("table")[3]
+        relations = []
+        self._parse_p_tags(node, table, relations)
+
+        for a in table.find_all("a"):
+            if a.get("href"):
+                self.add_url_todo(a["href"], distance + 1)
+
+        people_table = soup.find("table", {"id": "sort_grunk"})
+
+        for tr in people_table.find_all("tr"):
+            people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
+            if people_node:
+                people_node["relations"].append({
+                    "to": detox_id,
+                    "type": "detox",
+                })
 
     def scrape_films(self, url: str, distance: int = 0):
         film_id = self.url_to_id(url)
@@ -367,24 +459,25 @@ class NNDBScraper:
             self.add_url_todo(rel["url"], distance + 1)
             if self.url_to_type(rel["url"]) == "people":
                 people_node = self.get_node(rel["id"])
+                people_node["type"] = "people"
                 people_node["relations"].append({
                     "to": film_id,
                     "type": rel["type"]
                 })
 
-        people_table = soup.find("table", {"id": "sort_actors"})
-
-        for tr in people_table.find_all("tr"):
-            people_node = self._people_node_from_row(tr.find_all("td"))
-            if people_node:
-                people_node["relations"].append({
-                    "to": film_id,
-                    "type": "actor",
-                })
-
         for a in table.find_all("a"):
             if a.get("href"):
                 self.add_url_todo(a["href"], distance + 1)
+
+        people_table = soup.find("table", {"id": "sort_actors"})
+
+        for tr in people_table.find_all("tr"):
+            people_node = self._people_node_from_row(tr.find_all("td"), distance + 1)
+            if people_node:
+                people_node["relations"].append({
+                    "to": film_id,
+                    "type": "film",
+                })
 
         #print(node)
 
@@ -417,12 +510,12 @@ class NNDBScraper:
                     value = "".join(s.text for s in siblings).strip()
                     node[key] = value
 
-    def _people_node_from_row(self, row: List[bs4.Tag]) -> Optional[dict]:
+    def _people_node_from_row(self, row: List[bs4.Tag], distance: int) -> Optional[dict]:
         if not row or not row[0].find("a"):
             return
 
         href = row[0].find("a")["href"]
-        self.add_url_todo(href)
+        self.add_url_todo(href, distance)
         node = self.get_node(self.url_to_id(href))
         node.update({
             "type": "people",
@@ -436,54 +529,146 @@ class NNDBScraper:
         return node
 
 
-def scrape_all(json_filename: Path):
-    db = NNDBScraper()
-    db.scrape_index()
-    # db.add_url_todo("/company/028/000124653/")
-    db.add_url_todo("/gov/251/000127867/")
-    db.scrape()
-
-    json_filename.write_text(json.dumps(list(db.node_map.values())))
-
-
 def render_graph(nodes_filename: Path, graph_filename: Path):
     import igraph
 
     nodes = json.loads(nodes_filename.read_text())
 
     vertex_attributes = {
-        "name": [], "label": [], "type": [],
+        "name": [],
+        "label": [],
+        "type": [],
+        "occupation": [],
+        "age": [],
+        "age100": [],
     }
     vertex_id_map = {}
     edge_indices = []
     edge_attributes = {"type": []}
 
+    today = datetime.datetime.now()
     for node in nodes:
+        name: str = node.get("name") or node.get("Official website") or node["id"]
+        age = 0
+        if node["type"] == "people":
+            birth_date = node.get("Born")
+            if birth_date:
+                date = parse_date(birth_date)
+                if date:
+                    age = today.year - date.year
+                    name = f"{name} ({date.year})"
+
+        elif node["type"] == "film":
+            if "(" in name:
+                idx = name.rfind("(")
+                # fix "White Frog" https://www.nndb.com/films/822/000379682/
+                if name[idx+1:].startswith("SanFranc"):
+                    idx = name[:idx].rfind("(")
+                date = parse_date(name[idx+1:idx+12].strip(" ()"))
+                if date:
+                    name = name[:idx].strip()
+                    age = today.year - date.year
+                    name = f"{name} ({date.year})"
+
         vertex_attributes["name"].append(node["id"])
-        vertex_attributes["label"].append(node.get("name") or node.get("Official website") or node["id"])
+        vertex_attributes["label"].append(name)
         vertex_attributes["type"].append(node["type"])
+        vertex_attributes["occupation"].append(node.get("Occupation"))
+        vertex_attributes["age"].append(age)
+        vertex_attributes["age100"].append(min(100, age))
         vertex_id_map[node["id"]] = len(vertex_id_map)
 
     for node in nodes:
+        edge_set = set()
         for edge in node["relations"]:
-            #edge_indices.append((edge["from"], edge["to"]))
-            edge_indices.append((vertex_id_map[node["id"]], vertex_id_map[edge["to"]]))
-            edge_attributes["type"].append(edge["type"])
+            key = (edge["to"], edge["type"])
+            if key not in edge_set:
+                edge_set.add(key)
+                edge_indices.append((vertex_id_map[node["id"]], vertex_id_map[edge["to"]]))
+                edge_attributes["type"].append(edge["type"])
 
     graph = igraph.Graph(directed=True)
     graph.add_vertices(len(vertex_attributes["name"]), vertex_attributes)
     graph.add_edges(edge_indices, edge_attributes)
 
     print(f"{len(graph.vs)} x {len(graph.es)}")
-    graph.delete_vertices([
-        i for i, degree in enumerate(graph.degree())
-        if degree < 1
-    ])
-    print(f"{len(graph.vs)} x {len(graph.es)}")
+    while True:
+        ids_to_delete = [
+            i for i, (degree, type) in enumerate(zip(graph.degree(), graph.vs["type"]))
+            if degree < 1# or type not in ("film", "people")
+        ]
+        if not ids_to_delete:
+            break
+        graph.delete_vertices(ids_to_delete)
+        print(f"{len(graph.vs)} x {len(graph.es)}")
+
     graph.write(str(graph_filename))
 
 
+def parse_date(s: str) -> Optional[datetime.datetime]:
+    # print(f"[{s}]")
+    if "[" in s:
+        s = s[:s.index("[")].strip()
+    if s.startswith("fl."):
+        s = s[3:].strip()
+        match = re.match(r"(\d{4})-\d{2}", s)
+        if match:
+            s = match.groups()[0]
+    if s.endswith("AD"):
+        s = s[:-2].strip()
+    elif s.endswith("BC"):
+        return None
+    if s.startswith("c.") or s.startswith("c,"):
+        s = s[2:].strip()
+
+    if s == "1st c.":
+        s = "0100"
+    if s == "?":
+        return None
+
+    if len(s) == 2:
+        s = f"00{s}"
+    elif len(s) == 3:
+        s = f"0{s}"
+    elif len(s) >= 5:
+        spl = s.split("-")
+        if len(spl[-1]) == 2:
+            spl[-1] = f"00{spl[-1]}"
+        if len(spl[-1]) == 3:
+            spl[-1] = f"0{spl[-1]}"
+        s = "-".join(spl)
+
+    formats = (
+        "%d-%b-%Y",
+        "%b-%Y",
+        "%Y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.datetime.strptime(s, fmt)
+        except ValueError:
+            pass
+
+    raise ValueError(f"Could not parse date '{s}'")
+
+
+def scrape_all(json_filename: Path):
+    db = NNDBScraper(
+        max_distance=3,
+    )
+    #db.scrape_index()
+    db.add_url_todo("/people/030/000124655/") # Thiel
+    #db.add_url_todo("/people/688/000051535/")
+    # db.add_url_todo("/company/028/000124653/")
+    #db.add_url_todo("/gov/251/000127867/")
+    #db.add_url_todo("/group/207/000087943/")
+    #db.add_url_todo("/detox/511/000051358/")
+    db.scrape()
+
+    json_filename.write_text(json.dumps(list(db.node_map.values())))
+
+
 if __name__ == "__main__":
-    nodes_filename = (PROJECT_DIR / "stuff" / "nndb" / "many-nodes.json")
+    nodes_filename = (PROJECT_DIR / "stuff" / "nndb" / "nodes.json")
     scrape_all(nodes_filename)
-    render_graph(nodes_filename, PROJECT_DIR / "stuff" / "nndb" / "graph.graphml")
+    render_graph(nodes_filename, PROJECT_DIR / "stuff" / "nndb" / "thiel-d2.graphml")
