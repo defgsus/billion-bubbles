@@ -36,6 +36,7 @@ class Main:
     ):
         self.databases = sorted(databases)
         self.verbose = verbose
+        self.company_map = {}
         self.rows = {}
 
     def _log(self, *args):
@@ -53,6 +54,9 @@ class Main:
 
             self._extract_company_holders(db)
 
+        with open("extract-companies-map.json", "wt") as fp:
+            json.dump(self.company_map, fp)
+
         df = pd.DataFrame(self.rows).T
         df.to_pickle("extract-companies.df")
         print(df)
@@ -60,13 +64,22 @@ class Main:
     def _extract_company_holders(self, db: NasdaqDatabase):
         db_date = None
         for obj in db.iter_objects(
-            company_profile=False,
+            company_profile=True,
             company_holders=True,
             company_insiders=True,
             stock_chart=False,
             institution_positions=False,
             insider_positions=False,
         ):
+            if obj["type"] == "company_profile":
+                company_map = self.company_map.setdefault(obj["data"]["symbol"], {})
+                if obj["data"]["data"]["data"]:
+                    for key, value in obj["data"]["data"]["data"].items():
+                        if key != "ModuleTitle":
+                            if not company_map.get(key):
+                                company_map[key] = value["value"]
+                continue
+
             is_insider = obj["type"] == "company_insiders"
 
             symbol = obj["data"]["symbol"]
@@ -116,7 +129,7 @@ class Main:
                         elif row["insiderTrade"] == "Number of Shares Sold":
                             obj[f"insider_shares_sold_{span}"] = to_int(row[span])
                         elif row["insiderTrade"] == "Net Activity":
-                            obj[f"insider_shares_net_activity_{span}"] = to_int(row[span].strip("()"))
+                            obj[f"insider_shares_net_activity_{span}"] = to_int(row[span].strsip("()"))
             self.rows.setdefault(key, {}).update(obj)
 
 

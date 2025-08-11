@@ -56,9 +56,16 @@ class NasdaqApi:
                 if as_json:
                     return response.json()
                 return response.text
+            except json.JSONDecodeError as e:
+                if self.verbose:
+                    text = response.text
+                    print(f"JSON ERROR: {text[:50]} ... {text[-50:]}")
+                    if i + 1 == self.REQUEST_RETRIES:
+                        raise json.JSONDecodeError("json error", "", 0)
+                    time.sleep(i)
             except (requests.RequestException, ValueError) as e:
                 if self.verbose:
-                    print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+                    print(f"ERROR: {type(e).__name__}: {str(e)[:200]}", file=sys.stderr)
                 if i + 1 == self.REQUEST_RETRIES:
                     raise
                 kwargs["timeout"] += 5
@@ -96,7 +103,7 @@ class NasdaqApi:
             date_to = date_to.strftime("%Y-%m-%d")
         url = f"https://api.nasdaq.com/api/quote/{symbol}/chart" \
               f"?assetclass={asset_class}&fromdate={date_from}&todate={date_to}"
-        return self.request(url, json=True, clear_cookies=True)
+        return self.request(url, clear_cookies=True)
 
     def institutional_holdings(
             self,
