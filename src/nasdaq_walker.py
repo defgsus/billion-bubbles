@@ -187,7 +187,11 @@ class NasdaqWalker:
         del self._todo_company[symbol]
         self._num_companies += 1
 
-        profile = self.db.company_profile(symbol)["data"]
+        profile = self.db.company_profile(symbol)
+        if not profile:
+            return
+        profile = profile["data"]
+
         if self._interface:
             try:
                 self._interface.on_company_profile(symbol, profile)
@@ -196,9 +200,11 @@ class NasdaqWalker:
                 raise
 
         if self._do_stock_charts:
-            chart = self.db.stock_chart(symbol)["data"]
-            if self._interface:
-                self._interface.on_stock_chart(symbol, chart)
+            chart = self.db.stock_chart(symbol)
+            if chart:
+                chart = chart["data"]
+                if self._interface:
+                    self._interface.on_stock_chart(symbol, chart)
 
         if self._do_follow_holders and depth < self._max_depth_holder:
             self._follow_company_holders(symbol, depth + 1)
@@ -231,7 +237,10 @@ class NasdaqWalker:
             self._follow_insider_positions(id, depth + 1)
 
     def _follow_company_holders(self, symbol: str, depth: int):
-        holders = self.db.company_holders(symbol)["data"]
+        holders = self.db.company_holders(symbol)
+        if not holders:
+            return
+        holders = holders["data"]
         if self._interface:
             try:
                 self._interface.on_company_holders(symbol, holders)
@@ -258,7 +267,10 @@ class NasdaqWalker:
                 raise
 
     def _follow_company_insiders(self, symbol: str, depth: int):
-        insiders = self.db.company_insiders(symbol)["data"]
+        insiders = self.db.company_insiders(symbol)
+        if not insiders:
+            return
+        insiders = insiders["data"]
         if self._interface:
             try:
                 self._interface.on_company_insiders(symbol, insiders)
@@ -278,7 +290,10 @@ class NasdaqWalker:
                 raise
 
     def _follow_institution_positions(self, id: int, depth: int):
-        holdings = self.db.institution_positions(id)["data"]
+        holdings = self.db.institution_positions(id)
+        if not holdings:
+            return
+        holdings = holdings["data"]
         if self._interface:
             try:
                 self._interface.on_institution_positions(id, holdings)
@@ -304,7 +319,10 @@ class NasdaqWalker:
                 raise
 
     def _follow_insider_positions(self, id: int, depth: int):
-        data = self.db.insider_positions(id)["data"]
+        data = self.db.insider_positions(id)
+        if not data:
+            return
+        data = data["data"]
         if self._interface:
             try:
                 self._interface.on_insider_positions(id, data)

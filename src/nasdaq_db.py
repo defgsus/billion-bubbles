@@ -86,7 +86,7 @@ class NasdaqDatabase:
         self.db_session: Session = sessionmaker(bind=self.db_engine)()
         NasdaqDBBase.metadata.create_all(self.db_engine)
 
-    def company_profile(self, symbol: str, _unittest_override_db_check: bool = False) -> dict:
+    def company_profile(self, symbol: str, _unittest_override_db_check: bool = False) -> Optional[dict]:
         symbol = symbol.upper()
 
         if not _unittest_override_db_check:
@@ -100,6 +100,8 @@ class NasdaqDatabase:
 
         timestamp = datetime.datetime.utcnow()
         data = self.api.company_profile(symbol)
+        if data is None:
+            return
 
         self.db_session.add(
             CompanyProfile(symbol=symbol, timestamp=timestamp, data=data)

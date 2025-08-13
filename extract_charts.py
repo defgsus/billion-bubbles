@@ -16,6 +16,8 @@ from src.util import iter_ndjson, write_ndjson, to_int, to_float, JsonEncoder
 from src.config import DEFAULT_DB_NAME
 
 
+CHART_VALUES = ("value", "open", "close", "high", "low", "volume")
+
 def parse_args() -> dict:
     parser = argparse.ArgumentParser()
 
@@ -29,6 +31,11 @@ def parse_args() -> dict:
         help=f"Output filename (a pickled pandas DataFrame)",
     )
 
+    parser.add_argument(
+        "-v", "--value", type=str, default=None,
+        help=f"Only extract this value ({', '.join(CHART_VALUES)})",
+    )
+
     return vars(parser.parse_args())
 
 
@@ -38,10 +45,12 @@ class Main:
             self,
             databases: List[str],
             output: str,
+            value: Optional[str],
             verbose: bool = True,
     ):
         self.databases = sorted(databases)
         self.output_filename = output
+        self.extract_value = value
         self.verbose = verbose
         self.rows = {}
 
@@ -62,7 +71,10 @@ class Main:
 
         df = pd.DataFrame(self.rows).T
         df.index.set_names("date", inplace=True)
-        df.columns.set_names(("company", "value"), inplace=True)
+        if not self.extract_value:
+            df.columns.set_names(("company", "value"), inplace=True)
+        else:
+            df.columns.set_names("company", inplace=True)
         df.index = pd.to_datetime(df.index)
         df = df.sort_index()
         df.to_pickle(self.output_filename)
@@ -77,24 +89,30 @@ class Main:
             institution_positions=False,
             insider_positions=False,
         ):
-            if obj["data"]["data"]["data"]:
+            try:
                 data = obj["data"]["data"]["data"]
                 symbol = data["symbol"]
                 company = data["company"]
-                name = f"{symbol} ({company})"
+            except (TypeError, KeyError):
+                continue
+            
+            name = f"{symbol} ({company})"
 
-                for chart_row in data["chart"]:
-                    date = chart_row["z"]["dateTime"]
-                    date = "{2:04}-{0:02}-{1:02}".format(*map(int, date.split("/")))
-                    self.rows.setdefault(date, {})
-                    for key in ("value", "open", "close", "high", "low", "volume"):
+            for chart_row in data["chart"]:
+                date = chart_row["z"]["dateTime"]
+                date = "{2:04}-{0:02}-{1:02}".format(*map(int, date.split("/")))
+                self.rows.setdefault(date, {})
+                for key in CHART_VALUES:
+                    if self.extract_value is None or key == self.extract_value:
                         if key == "volume":
                             val = to_int(chart_row["z"][key])
                         else:
                             val = to_float(chart_row["z"][key])
-                        self.rows[date][(name, key)] = val
+                        key = (name, key) if self.extract_value is None else name
+                        self.rows[date][key] = val
 
-                #break
+            #if len(next(iter(self.rows.values()))) > 3:
+            #    break
 
 
 def dump(data: dict):

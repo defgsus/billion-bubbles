@@ -40,7 +40,7 @@ class NasdaqApi:
             as_json: bool = True,
             clear_cookies: bool = False,
             **kwargs,
-    ) -> Union[str, list, dict]:
+    ) -> Union[None, str, list, dict]:
         kwargs.setdefault("timeout", self.REQUEST_TIMEOUT)
         for i in range(self.REQUEST_RETRIES):
             try:
@@ -57,12 +57,17 @@ class NasdaqApi:
                     return response.json()
                 return response.text
             except json.JSONDecodeError as e:
+                text = response.text
+                if "This page is currently unavailable. We are working to resolve the issue." in text:
+                    if i + 1 >= self.REQUEST_RETRIES:
+                        if self.verbose:
+                            print(f"PAGE ERROR for {url}")
+                        return None
                 if self.verbose:
-                    text = response.text
                     print(f"JSON ERROR: {text[:50]} ... {text[-50:]}")
                     if i + 1 == self.REQUEST_RETRIES:
                         raise json.JSONDecodeError("json error", "", 0)
-                    time.sleep(i)
+                time.sleep(i)
             except (requests.RequestException, ValueError) as e:
                 if self.verbose:
                     print(f"ERROR: {type(e).__name__}: {str(e)[:200]}", file=sys.stderr)

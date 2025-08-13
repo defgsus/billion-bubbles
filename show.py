@@ -18,7 +18,7 @@ def main():
         help="ID or trading symbol",
     )
     parser.add_argument(
-        "--db", type=str, nargs="?", default=str(DEFAULT_DB_NAME),
+        "-db", type=str, nargs="?", default=str(DEFAULT_DB_NAME),
         help=f"Name of database file, defaults to '{DEFAULT_DB_NAME}'",
     )
     parser.add_argument(
